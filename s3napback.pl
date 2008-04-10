@@ -54,9 +54,11 @@ my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 $year += 1900;
 $mon += 1;
 
+my $datestring = time2str("%Y-%m-%d", time);
+	
 print "\n\n\n";
 print "------------------------------------------------------------------\n";
-print "Starting s3napback  $mday/$mon/$year   $hour:$min\n\n";
+print "Starting s3napback  $datestring   $hour:$min\n\n";
 
 my %opt;
 #---------- ---------- ---------- ---------- ---------- ----------
@@ -137,15 +139,13 @@ for my $configfile (@configs)
 	# check what has already been done
 	my $list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 	
-	my $datestring = time2str("%Y-%m-%d", time);
 	print("Getting current contents of bucket $bucket modified on $datestring...\n");
 	my @bucketlist = `$list_s3_bucket`;
 	
 	my @alreadyDoneToday = grep $datestring, @bucketlist;
 	
 	# 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
-	
-	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; $_ } @alreadyDoneToday;
+	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp } @alreadyDoneToday;
 
 	print "Buckets already done today: \n";
 	map { print; print "\n"; } @alreadyDoneToday;
