@@ -57,7 +57,7 @@ print "Starting s3snap  $mday/$mon/$year   $hour:$min\n\n";
 my %opt;
 #---------- ---------- ---------- ---------- ---------- ----------
 # Process command-line Arguments + Options
-getopts('c:t', \%opt) ||  die usage();
+getopts('c:td', \%opt) ||  die usage();
 
 #if($opt{h}) {
 #	usage();
@@ -333,7 +333,7 @@ sub sendToS3
 	{
 	my ($name,$datasource,$bucketfullpath) = @_;
 	
-	if($opt{t})
+	if($opt{t} || $opt{d})
 		{
 		print "$delete_from_s3 $bucketfullpath\n";
 		print "$datasource | $encrypt | $send_to_s3 $bucketfullpath\n\n";
