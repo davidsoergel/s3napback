@@ -145,7 +145,7 @@ for my $configfile (@configs)
 	my @alreadyDoneToday = grep $datestring, @bucketlist;
 	
 	# 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
-	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp } @alreadyDoneToday;
+	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp; $_ } @alreadyDoneToday;
 
 	print "Buckets already done today: \n";
 	map { print; print "\n"; } @alreadyDoneToday;
