@@ -105,7 +105,7 @@ for my $configfile (@configs)
 
 	#print "config=" . $mainConfig->dump() . "\n";
 
-	my $diffdir = $mainConfig->get("DiffDir");
+	$diffdir = $mainConfig->get("DiffDir");
 	$diffdir || die "DiffDir must be defined.";
 
 	# insure that $diffdir ends with a slash
