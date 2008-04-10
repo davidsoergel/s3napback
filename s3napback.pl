@@ -264,7 +264,7 @@ sub backupDirectory
 		}
 		
 	my $difffile =  $name . ".diff";
-	$difffile =~ s/\//_/;
+	$difffile =~ s/\//_/g;
 	$difffile = $diffdir . $difffile;
 	
     my $sb = stat($difffile);
