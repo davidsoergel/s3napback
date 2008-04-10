@@ -145,7 +145,7 @@ for my $configfile (@configs)
 	
 	# 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
 	
-	@alreadyDoneToday = map { s/.* - (.*?) - .*/\1/; $_ } @alreadyDoneToday;
+	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; $_ } @alreadyDoneToday;
 
 	print "Buckets already done today: \n";
 	map { print; print "\n"; } @alreadyDoneToday;
