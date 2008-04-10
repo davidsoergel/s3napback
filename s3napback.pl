@@ -126,7 +126,7 @@ for my $configfile (@configs)
 
 	# setup commands (this is the crux of the matter)
 	$encrypt="gpg -r $recipient -e";
-	$send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -v -K $s3keyfile -i -b";
+	$send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 
 	processBlock($mainConfig);
@@ -172,10 +172,10 @@ sub processBlock()
 			{
 				
 			# avoid confusion with SubversionDir
-			if($name->[0] ne "subversion")
-				{
-				next;
-				}
+	#		if($name->[0] ne "subversion")
+	#			{
+	#			next;
+	#			}
 				
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
@@ -195,10 +195,10 @@ sub processBlock()
 		if(ref($name) eq 'ARRAY')
 			{
 			# avoid confusion with Subversion
-			if($name->[0] ne "subversiondir")
-				{
-				next;
-				}
+	#		if($name->[0] ne "subversiondir")
+	#			{
+	#			next;
+	#			}
 				
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
