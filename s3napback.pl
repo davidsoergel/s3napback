@@ -168,7 +168,7 @@ sub processBlock()
 		my $block = $config;
 		if(ref($name) eq 'ARRAY')
 			{
-			print($name->[1] . " => " . $name->[2] . "\n");
+			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
 			}
@@ -185,7 +185,7 @@ sub processBlock()
 		my $block = $config;
 		if(ref($name) eq 'ARRAY')
 			{
-			print($name->[1] . " => " . $name->[2] . "\n");
+			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
 			}
