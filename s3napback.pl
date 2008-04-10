@@ -47,6 +47,8 @@ my $encrypt;
 my $delete_from_s3;
 my $send_to_s3;
 
+my %isAlreadyDoneToday= {};
+
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
 $year += 1900;
@@ -133,10 +135,10 @@ for my $configfile (@configs)
 	
 	
 	# check what has already been done
-	$list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket";
+	my $list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket";
 	
-	my $datestring = time2str("%Y-%m-%d", time)
-	print("Getting current contents of bucket $b modified on $datestring...\n")
+	my $datestring = time2str("%Y-%m-%d", time);
+	print("Getting current contents of bucket $bucket modified on $datestring...\n");
 	my @bucketlist = `$list_s3_bucket`;
 	
 	my @alreadyDoneToday = grep $datestring, @bucketlist;
@@ -146,8 +148,7 @@ for my $configfile (@configs)
 	@alreadyDoneToday = map { s/.* - (.*?) - .*/\1/; $_ } @alreadyDoneToday;
 
 	print "Buckets already done today: \n";
-	map { print; print "\n"; } @alreadyDoneToday; 
-	undef %isAlreadyDoneToday;
+	map { print; print "\n"; } @alreadyDoneToday;
 	for (@alreadyDoneToday) { $isAlreadyDoneToday{$_} = 1; }
 
 	processBlock($mainConfig);
