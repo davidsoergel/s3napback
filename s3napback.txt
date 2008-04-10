@@ -119,7 +119,7 @@ Create a configuration file something like this (descriptions of the options fol
 	<Subversion /home/svn/repos/myproject>
 	 	Frequency 1
 		Fulls 10
-	</SubversionDir>
+	</Subversion>
 
 To run it, just pipe the config file into the script:
 

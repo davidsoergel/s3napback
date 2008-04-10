@@ -91,11 +91,12 @@ unshift @configs, $opt{c} if $opt{c};
 
 for my $configfile (@configs)
 	{
-	my $mainConfig = new Config::ApacheFormat;
+	my $mainConfig = new Config::ApacheFormat 
+					 duplicate_directives => 'combine';
 
 	$mainConfig->read($configfile);
 
-	print "config=$mainConfig\n";
+	#print "config=" . $mainConfig->dump() . "\n";
 
 	my $diffdir = $mainConfig->get("DiffDir");
 	$diffdir || die "DiffDir must be defined.";
@@ -106,7 +107,7 @@ for my $configfile (@configs)
 		$diffdir = $diffdir . "/";
 		}
 
-	my $bucket = $mainConfig->get("Bucket");
+	$bucket = $mainConfig->get("Bucket");
 	$bucket || die "Bucket must be defined.";
 	
 	my $recipient = $mainConfig->get("GpgRecipient");
@@ -123,15 +124,15 @@ for my $configfile (@configs)
 	#my $loglevel = $mainConfig->get("LogLevel");
 
 	# setup commands (this is the crux of the matter)
-	my $encrypt="gpg -r $recipient -e";
-	my $send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -v -K $s3keyfile -i -b";
-	my $delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
+	$encrypt="gpg -r $recipient -e";
+	$send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -v -K $s3keyfile -i -b";
+	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 
 	processBlock($mainConfig);
 
 	for my $cycle ($mainConfig->get("Cycle"))
 		{
-		my $block = $mainConfig->block(Cycle => $cycle);
+		my $block = $mainConfig->block($cycle);
 		processBlock($block);
 		}
 
@@ -141,42 +142,71 @@ sub processBlock()
 	{
 	my($config) = @_;
 	
-	for my $name ($config->get("Subversion"))
-		{
-		my $block = $config->block(Subversion => $name);
-		my $frequency = $block->get("frequency");
-		my $fulls = $block->get("Fulls");
-	
-		backupSubversion($name, $frequency, $fulls);
-		}
-	
-	for my $name ($config->get("SubversionDir"))
-		{
-		my $block = $config->block(SubversionDir => $name);
-		my $frequency = $block->get("frequency");
-		my $fulls = $block->get("Fulls");
-	
-		backupSubversionDir($name, $frequency, $fulls);
-		}
-
-	for my $name ($config->get("MySQL"))
-		{
-		my $block = $config->block(MySQL => $name);
-		my $frequency = $block->get("frequency");
-		my $fulls = $block->get("Fulls");
-	
-		backupMysql($name, $frequency, $fulls);
-		}
-
 	for my $name ($config->get("Directory"))
 		{
-		my $block = $config->block(Directory => $name);
-		my $frequency = $block->get("frequency");
+		#print "Directory $name\n";
+		
+		my $block = $config;
+		if(ref($name) eq 'ARRAY')
+			{
+			$block = $config->block($name);
+			$name = $name->[1];
+			}
+
+		my $frequency = $block->get("Frequency");
 		my $diffs = $block->get("Diffs");
 		my $fulls = $block->get("Fulls");
 	
 		backupDirectory($name, $frequency, $diffs, $fulls);
-		}
+  	}
+    	
+    for my $name ($config->get("Subversion"))
+    	{
+    	#print "Subversion $name\n";
+
+		my $block = $config;
+		if(ref($name) eq 'ARRAY')
+			{
+			$block = $config->block($name);
+			$name = $name->[1];
+			}
+
+    	my $frequency = $block->get("frequency");
+    	my $fulls = $block->get("Fulls");
+    
+    	backupSubversion($name, $frequency, $fulls);
+    	}
+    
+    for my $name ($config->get("SubversionDir"))
+    	{
+		my $block = $config;
+		if(ref($name) eq 'ARRAY')
+			{
+			$block = $config->block($name);
+			$name = $name->[1];
+			}
+
+    	my $frequency = $block->get("frequency");
+    	my $fulls = $block->get("Fulls");
+    
+    	backupSubversionDir($name, $frequency, $fulls);
+    	}
+ 
+    for my $name ($config->get("MySQL"))
+    	{
+		my $block = $config;
+		if(ref($name) eq 'ARRAY')
+			{
+			$block = $config->block($name);
+			$name = $name->[1];
+			}
+
+    	my $frequency = $block->get("frequency");
+    	my $fulls = $block->get("Fulls");
+    
+    	backupMysql($name, $frequency, $fulls);
+    	}
+
 	}	
 	
 sub backupDirectory
@@ -306,7 +336,7 @@ sub sendToS3
 	if($opt{t})
 		{
 		print "$delete_from_s3 $bucketfullpath\n";
-		print "$datasource | $encrypt | $send_to_s3 $bucketfullpath\n";
+		print "$datasource | $encrypt | $send_to_s3 $bucketfullpath\n\n";
 		}
 	else
 		{
