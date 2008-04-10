@@ -52,7 +52,7 @@ $year += 1900;
 
 print "\n\n\n";
 print "------------------------------------------------------------------\n";
-print "Starting s3snap  $mday/$mon/$year   $hour:$min\n\n";
+print "Starting s3napback  $mday/$mon/$year   $hour:$min\n\n";
 
 my %opt;
 #---------- ---------- ---------- ---------- ---------- ----------
@@ -91,8 +91,9 @@ unshift @configs, $opt{c} if $opt{c};
 
 for my $configfile (@configs)
 	{
-	my $mainConfig = new Config::ApacheFormat 
-					 duplicate_directives => 'combine';
+	my $mainConfig = Config::ApacheFormat->new(
+					 duplicate_directives => 'combine',
+					inheritance_support => 0);
 
 	$mainConfig->read($configfile);
 
