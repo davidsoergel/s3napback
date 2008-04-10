@@ -35,6 +35,7 @@
 
 
 use strict;
+use Date::Format;
 use File::stat;
 use Getopt::Std;    
 use Config::ApacheFormat;
@@ -49,6 +50,7 @@ my $send_to_s3;
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
 $year += 1900;
+$mon += 1;
 
 print "\n\n\n";
 print "------------------------------------------------------------------\n";
@@ -68,7 +70,7 @@ getopts('c:td', \%opt) ||  die usage();
 
 if($opt{t})
 	{
-	print "TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN\n";
+	print "TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN\n\n";
 	}
 
 
@@ -128,6 +130,25 @@ for my $configfile (@configs)
 	$encrypt="gpg -r $recipient -e";
 	$send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
+	
+	
+	# check what has already been done
+	$list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket";
+	
+	my $datestring = time2str("%Y-%m-%d", time)
+	print("Getting current contents of bucket $b modified on $datestring...\n")
+	my @bucketlist = `$list_s3_bucket`;
+	
+	my @alreadyDoneToday = grep $datestring, @bucketlist;
+	
+	# 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
+	
+	@alreadyDoneToday = map { s/.* - (.*?) - .*/\1/; $_ } @alreadyDoneToday;
+
+	print "Buckets already done today: \n";
+	map { print; print "\n"; } @alreadyDoneToday; 
+	undef %isAlreadyDoneToday;
+	for (@alreadyDoneToday) { $isAlreadyDoneToday{$_} = 1; }
 
 	processBlock($mainConfig);
 
@@ -354,6 +375,12 @@ sub backupSubversionDir
 sub sendToS3
 	{
 	my ($name,$datasource,$bucketfullpath) = @_;
+	
+	if($isAlreadyDoneToday{$bucketfullpath} && !$opt{f})
+		{
+		print "Skipping $bucketfullpath; already done today\n";
+		return;
+		}
 	
 	if($opt{t} || $opt{d})
 		{
