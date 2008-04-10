@@ -274,7 +274,7 @@ sub backupMysql
 	print "MySQL $name -> $bucketfullpath\n";
 	
 	if($name eq "all") { $name = "--all-databases"; }
-	my $datasource = "mysqldump --opt $name";
+	my $datasource = "mysqldump --opt $name | gzip";
 	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
@@ -292,7 +292,7 @@ sub backupSubversion
 	my $cycles = $fulls;
 	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
-	my $datasource = "svnadmin -q dump $name";
+	my $datasource = "svnadmin -q dump $name | gzip";
 	my $bucketfullpath = "$bucket:$name-$cyclenum";
 	
 	print "Subversion $name -> $bucketfullpath\n";
@@ -324,7 +324,7 @@ sub backupSubversionDir
 		`svnadmin verify $name/$subdir >& /dev/null`;
 		if ($? == 0 )
 			{
-			my $datasource = "svnadmin -q dump $name/$subdir";
+			my $datasource = "svnadmin -q dump $name/$subdir | gzip";
 			my $bucketfullpath = "$bucket:$name/$subdir-$cyclenum";
 			
 			print "Subversion $name/$subdir -> $bucketfullpath\n";
