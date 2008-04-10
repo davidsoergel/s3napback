@@ -109,7 +109,7 @@ for my $configfile (@configs)
 	$diffdir || die "DiffDir must be defined.";
 
 	# insure that $diffdir ends with a slash
-	if(!$diffdir =~ /\/$/)
+	if(!($diffdir =~ /\/$/))
 		{
 		$diffdir = $diffdir . "/";
 		}
