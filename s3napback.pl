@@ -135,7 +135,7 @@ for my $configfile (@configs)
 	
 	
 	# check what has already been done
-	my $list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket";
+	my $list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 	
 	my $datestring = time2str("%Y-%m-%d", time);
 	print("Getting current contents of bucket $bucket modified on $datestring...\n");
