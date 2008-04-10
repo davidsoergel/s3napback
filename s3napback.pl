@@ -166,8 +166,15 @@ sub processBlock()
     	#print "Subversion $name\n";
 
 		my $block = $config;
-		if(ref($name) eq 'ARRAY')
+		if(ref($name) eq 'ARRAY') 
 			{
+				
+			# avoid confusion with SubversionDir
+			if($name->[0] ne "Subversion")
+				{
+				next;
+				}
+				
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
@@ -185,6 +192,12 @@ sub processBlock()
 		my $block = $config;
 		if(ref($name) eq 'ARRAY')
 			{
+			# avoid confusion with Subversion
+			if($name->[0] ne "SubversionDir")
+				{
+				next;
+				}
+				
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
