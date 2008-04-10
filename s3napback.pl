@@ -36,6 +36,7 @@
 
 use strict;
 use File::stat;
+use Getopt::Std;    
 use Config::ApacheFormat;
 
 my $diffdir;
@@ -47,6 +48,8 @@ my $send_to_s3;
 
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
+$year += 1900;
+
 print "\n\n\n";
 print "------------------------------------------------------------------\n";
 print "Starting s3snap  $mday/$mon/$year   $hour:$min\n\n";
@@ -54,7 +57,7 @@ print "Starting s3snap  $mday/$mon/$year   $hour:$min\n\n";
 my %opt;
 #---------- ---------- ---------- ---------- ---------- ----------
 # Process command-line Arguments + Options
-getopts('t', \%opt) ||  die usage();
+getopts('c:t', \%opt) ||  die usage();
 
 #if($opt{h}) {
 #	usage();
@@ -63,69 +66,76 @@ getopts('t', \%opt) ||  die usage();
 
 #my $debug = 0;
 
-#my @configs; 
-
-#for(@ARGV) {
-#	if(-f "/etc/s3napback/$_.conf") {
-#		push @configs, "/etc/snapback/$_.conf";
-#	}
-#	elsif(-f "/etc/s3napback/$_") {
-#		push @configs, "/etc/s3napback/$_";
-#	}
-#	
-#}
-
 if($opt{t})
 	{
 	print "TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN\n";
 	}
 
-my $mainConfig = new Config::ApacheFormat;
-#					 duplicate_directives => 'combine',
-#					 root_directive => 's3napback',
-#					;
 
-$mainConfig->read(<STDIN>);
 
-print "config=$mainConfig\n";
 
-my $diffdir = $mainConfig->get("DiffDir");
-$diffdir || die "DiffDir must be defined.";
+my @configs; 
 
-# insure that $diffdir ends with a slash
-if(!$diffdir ~= /\/$/)
-	{
-	$diffdir = $diffdir . "/";
+for(@ARGV) {
+	if(-f "/etc/snapback/$_.conf") {
+		push @configs, "/etc/snapback/$_.conf";
 	}
-
-my $bucket = $mainConfig->get("Bucket");
-$bucket || die "Bucket must be defined.";
+	elsif(-f "/etc/snapback/$_") {
+		push @configs, "/etc/snapback/$_";
+	}
 	
-my $recipient = $mainConfig->get("GpgRecipient");
-$recipient || die "GpgRecipient must be defined.";
+}
 
-my $s3keyfile = $mainConfig->get("S3Keyfile");
-$s3keyfile || die "S3Keyfile must be defined.";
+unshift @configs, $opt{c} if $opt{c};
+@configs = '' unless @configs;
 
-my $chunksize = $mainConfig->get("ChunkSize");
-$chunksize || die "ChunkSize must be defined.";
-
-#my $notifyemail = $mainConfig->get("NotifyEmail");
-#my $logfile = $mainConfig->get("LogFile");
-#my $loglevel = $mainConfig->get("LogLevel");
-
-# setup commands (this is the crux of the matter)
-my $encrypt="gpg -r $recipient -e";
-my $send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -v -K $s3keyfile -i -b";
-my $delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
-
-processBlock($mainConfig);
-
-for my $cycle ($mainConfig->get("Cycle"))
+for my $configfile (@configs)
 	{
-	my $block = $mainConfig->block(Cycle => $name);
-	processBlock($block);
-	}
+	my $mainConfig = new Config::ApacheFormat;
+
+	$mainConfig->read($configfile);
+
+	print "config=$mainConfig\n";
+
+	my $diffdir = $mainConfig->get("DiffDir");
+	$diffdir || die "DiffDir must be defined.";
+
+	# insure that $diffdir ends with a slash
+	if(!$diffdir =~ /\/$/)
+		{
+		$diffdir = $diffdir . "/";
+		}
+
+	my $bucket = $mainConfig->get("Bucket");
+	$bucket || die "Bucket must be defined.";
+	
+	my $recipient = $mainConfig->get("GpgRecipient");
+	$recipient || die "GpgRecipient must be defined.";
+
+	my $s3keyfile = $mainConfig->get("S3Keyfile");
+	$s3keyfile || die "S3Keyfile must be defined.";
+
+	my $chunksize = $mainConfig->get("ChunkSize");
+	$chunksize || die "ChunkSize must be defined.";
+
+	#my $notifyemail = $mainConfig->get("NotifyEmail");
+	#my $logfile = $mainConfig->get("LogFile");
+	#my $loglevel = $mainConfig->get("LogLevel");
+
+	# setup commands (this is the crux of the matter)
+	my $encrypt="gpg -r $recipient -e";
+	my $send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -v -K $s3keyfile -i -b";
+	my $delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
+
+	processBlock($mainConfig);
+
+	for my $cycle ($mainConfig->get("Cycle"))
+		{
+		my $block = $mainConfig->block(Cycle => $cycle);
+		processBlock($block);
+		}
+
+}
 
 sub processBlock()
 	{
@@ -151,7 +161,7 @@ sub processBlock()
 
 	for my $name ($config->get("MySQL"))
 		{
-		my $block = $config->block(MySQL => $mysql);
+		my $block = $config->block(MySQL => $name);
 		my $frequency = $block->get("frequency");
 		my $fulls = $block->get("Fulls");
 	
@@ -208,7 +218,7 @@ sub backupDirectory
 	my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
 	print "Directory $name -> $bucketfullpath\n";
-	sendToS3($datasource, $bucketfullpath);
+	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
 	
@@ -230,7 +240,7 @@ sub backupMysql
 	
 	if($name eq "all") { $name = "--all-databases"; }
 	my $datasource = "mysqldump --opt $name";
-	sendToS3($datasource, $bucketfullpath);
+	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
 	
@@ -251,7 +261,7 @@ sub backupSubversion
 	my $bucketfullpath = "$bucket:$name-$cyclenum";
 	
 	print "Subversion $name -> $bucketfullpath\n";
-	sendToS3($datasource, $bucketfullpath);
+	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
 		
@@ -283,7 +293,7 @@ sub backupSubversionDir
 			my $bucketfullpath = "$bucket:$name/$subdir-$cyclenum";
 			
 			print "Subversion $name/$subdir -> $bucketfullpath\n";
-			sendToS3($datasource, $bucketfullpath);
+			sendToS3($name, $datasource, $bucketfullpath);
 			}
 		}
 	}
@@ -291,7 +301,7 @@ sub backupSubversionDir
 
 sub sendToS3
 	{
-	my ($name $datasource,$bucketfullpath) = @_;
+	my ($name,$datasource,$bucketfullpath) = @_;
 	
 	if($opt{t})
 		{
