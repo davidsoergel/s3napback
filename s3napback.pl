@@ -132,7 +132,7 @@ for my $configfile (@configs)
 
 	# setup commands (this is the crux of the matter)
 	$encrypt="gpg -r $recipient -e";
-	$send_to_s3="java -Xmx128M -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";
+	$send_to_s3="java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b"; # -Xmx128M 
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 	
 	
