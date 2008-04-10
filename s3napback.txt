@@ -1,0 +1,206 @@
+Cycling, Incremental, Compressed, Encrypted Backups on Amazon S3
+================================================================
+
+The problem
+-----------
+
+In searching for a way to back up one of my Linux boxes to Amazon S3, I was surprised to find that none of the many backup methods and scripts I found on the net did what I wanted, so I wrote yet another one.
+
+The design requirements were:
+
+* Occasional full backups, and daily incremental backups
+* Stream data to S3, rather than making a local temp file first (i.e., if I want to archive all of /home at once, there's no point in making huge local tarball, doing lots of disk access in the process)
+* Break up large archives into manageable chunks
+* Encryption
+
+As far as I could tell, no available backup script (including, e.g. s3sync, backup-manager, s3backup, etc. etc.) met all four requirements.
+
+The closest thing is js3tream, which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested] (http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce s3backup-gpg-streaming.sh.
+
+That's not the end of the story, though, since it leaves open the problem of managing the backup rotation.  I found the explicit cron jobs suggested on the js3tream site too messy, especially since I sometimes want to back up a lot of different directories.  Some other available solutions will send incremental backups to S3, but never purge the old ones, and so use ever more storage.
+
+Finally, I wanted to easily deal with MySQL and Subversion dumps.
+
+
+The solution
+------------
+
+I wrote s3napback.pl, which wraps js3tream and solves all of the above issues by providing:
+
+* Dead-simple configuration
+* Automatic rotation of backup sets
+* Alternation of full and incremental backups (using "tar -g")
+* Integrated GPG encryption
+* No temporary files used anywhere, only pipes and TCP streams
+* Integrated handling of MySQL dumps
+* Integrated handling of Subversion repositories, and of directories containing multiple Subversion repositories.
+
+It's not rocket science, just a wrapper that makes things a bit easier.
+
+
+Installation
+------------
+
+First you'll need [js3tream](http://js3tream.sourceforge.net).  Once you've downloaded and extracted it somewhere, configure it with your S3 login information by creating a file called e.g. key.txt containing
+
+	key=your AWS key
+	secret=your AWS secret
+
+Then download s3napback.pl and put it in the js3tream directory.
+
+Create a configuration file something like this (descriptions of the options follow, if they're not entirely obvious):
+
+	DiffDir /home/s3backup/diffs
+	Bucket dev.davidsoergel.com.backup1
+	GpgRecipient backup@davidsoergel.com
+	S3Keyfile /home/s3backup/key.txt
+	ChunkSize 25000000
+	
+	NotifyEmail me@example.com      # not implemented yet
+	LogFile /var/log/s3napback.log  # not implemented yet
+	LogLevel 2                      # not implemented yet
+	
+	# make diffs of these every day, store fulls once a week, and keep two weeks
+	<Cycle>
+		Frequency 1
+		Diffs 7
+		Fulls 2
+	
+		Directory /etc
+		Directory /home/build
+		Directory /home/notebook
+		Directory /home/s3backup
+		Directory /home/trac
+		Directory /usr
+		Directory /var
+	</Cycle>
+	
+	# make diffs of these every week, store fulls once a month, and keep two months
+	<Cycle>
+		Frequency 7
+		Diffs 4
+		Fulls 2
+		
+		Directory /bin
+		Directory /boot
+		Directory /lib
+		Directory /lib64
+		Directory /opt
+		Directory /root
+		Directory /sbin
+	</Cycle>
+	
+	# make a diff of this every day, store fulls once a week, and keep eight weeks
+	<Directory /home/foobar>
+		Frequency 1
+		Diffs 7
+		Fulls 8
+	</Directory>
+		
+	# store a MySQL dump of all databases every day, keeping 14.
+	<MySQL all>
+		Frequency 1
+		Fulls 14
+	</MySQL>
+	
+	# store a MySQL dump of a specific database every day, keeping 14.
+	<MySQL mydatabase>
+		Frequency 1
+		Fulls 14
+	</MySQL>
+	
+	# store a full dump of all Subversion repos every day, keeping 10.
+	<SubversionDir /home/svn/repos>
+	 	Frequency 1
+		Fulls 10
+	</SubversionDir>
+	
+	# store a full dump of a specific Subversion repo every day, keeping 10.
+	<Subversion /home/svn/repos/myproject>
+	 	Frequency 1
+		Fulls 10
+	</SubversionDir>
+
+To run it, just pipe the config file into the script:
+
+	./s3snap.pl < s3snap.conf
+
+That's it!  You can put that command in a cron job to run once a day.
+
+
+Priniciples of operation
+------------------------
+
+The cycling of backup sets here is rudimentary, taking its inspiration from the cron job approach given on the js3tream page.  The principle is that we'll sort the snapshots into a fixed number of "slots"; every new backup simply overwrites the oldest slot, so we don't need to explicitly purge old files.
+
+This is a fairly crappy schedule, in that the rotation doesn't decay over time.  We just keep a certain number of daily backups (full or diff), and that's it.  For my purposes, that's good enough for now; but I bet someone out there will figure out a clever means of producing a decaying schedule.
+
+Note also that the present scheme means that, once the oldest full backup is deleted, the diffs based on it will still be stored until they are overwritten, but may not be all that useful.  For instance, if you do daily diffs and weekly fulls for two weeks, then at some point you'll go from this situation, where you can reconstruct your data for any day from the last two weeks (F = full, D = diff, time flowing to the right):
+
+	FDDDDDDFDDDDDD
+
+to this one:
+
+	 DDDDDDFDDDDDDF
+
+where the full backup on which the six oldest diffs are based is gone, so in fact you can only fully reconstruct the last 8 days.  You can still retrieve files that changed on the days represented by the old diffs, of course.
+
+
+Configuration
+-------------
+
+First off you'll need some general configuration statements:
+
+* DiffDir
+	a directory where tar can store its diff files (necessary for incremental backups).
+* Bucket
+ 	the destination bucket on S3.
+* GpgRecipient
+	the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.
+* S3KeyFile
+	the file containing your AWS authentication keys.
+* ChunkSize
+	the size of the chunks to be stored on S3, in bytes.
+
+Then you can specify as many directories, databases, and repositories as you like to be backed up.  These may be contained in <Cycle> blocks, for the sake of reusing timing configuration, or may be blocks themselves with individual timings.
+
+* Directory <name> <frequency> <diffs> <fulls>
+	<name> a directory to be backed up
+	<frequency> tells how often this directory should be backed up at all, in days.
+	<diffs> tells how long the cycle between full backups should be.  (Really there will be one fewer diffs than this, since the full backup that starts the cycle itself counts as one).
+	<fulls> tells how many total cycles to keep.
+* MySQL <databasename> <frequency> 0 <fulls>
+	In order for this to work, the user you're running the script as must be able to mysqldump the requested databases without entering a password.  This can be accomplished through the use of a .my.cnf file in the user's home directory.
+	<databasename> names a single database to be backed up, or "all" to dump all databases.
+	<frequency> tells how often the backup should be made, in days.
+	the "diffs" parameter is ignored, since mysql dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
+	<fulls> tells how many backups should be kept.		
+* Subversion <repository> <frequency> 0 <fulls>
+	<repository> names a single svn repository to be backed up.
+	<frequency> tells how often the backup should be made, in days.
+	the "diffs" parameter is ignored, since svnadmin dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
+	<fulls> tells how many backups should be kept.
+* SubversionDir <repository-dir> <frequency> 0 <fulls>
+	<repository-dir> a directory containing multiple subversion repositories, all of which should be backed up
+	<frequency> tells how often the backup should be made, in days.
+	the "diffs" parameter is ignored, since mysql dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
+	<fulls> tells how many backups should be kept.
+	(this feature was inspired by http://www.hlynes.com/2006/10/01/backups-part-2-subversion)
+
+
+Recovery
+--------
+
+Recovery is not automated, but if you need it, you'll be motivated to follow this simple manual process.
+
+To retrieve a backup, use js3tream to download the files you need, then decrypt them with GPG, then extract the tarballs.  Always start with the most recent FULL backup, then apply all available diffs in date order, regardless of the slot number.
+
+
+Future Improvements
+-------------------
+
+* Code could be a lot cleaner, handle errors better, etc.
+* Rotation schedule should be made decaying somehow
+* S3 uploads could be done in parallel, since that can speed things up a lot
+
+Please let me know if you make these or any other improvements!
