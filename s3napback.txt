@@ -63,6 +63,7 @@ Create a configuration file something like this (descriptions of the options fol
 	# make diffs of these every day, store fulls once a week, and keep two weeks
 	<Cycle>
 		Frequency 1
+		Phase 0
 		Diffs 7
 		Fulls 2
 	
@@ -78,6 +79,7 @@ Create a configuration file something like this (descriptions of the options fol
 	# make diffs of these every week, store fulls once a month, and keep two months
 	<Cycle>
 		Frequency 7
+		Phase 0
 		Diffs 4
 		Fulls 2
 		
@@ -93,6 +95,7 @@ Create a configuration file something like this (descriptions of the options fol
 	# make a diff of this every day, store fulls once a week, and keep eight weeks
 	<Directory /home/foobar>
 		Frequency 1
+		Phase 0
 		Diffs 7
 		Fulls 8
 	</Directory>
@@ -100,24 +103,28 @@ Create a configuration file something like this (descriptions of the options fol
 	# store a MySQL dump of all databases every day, keeping 14.
 	<MySQL all>
 		Frequency 1
+		Phase 0
 		Fulls 14
 	</MySQL>
 	
 	# store a MySQL dump of a specific database every day, keeping 14.
 	<MySQL mydatabase>
 		Frequency 1
+		Phase 0
 		Fulls 14
 	</MySQL>
 	
 	# store a full dump of all Subversion repos every day, keeping 10.
 	<SubversionDir /home/svn/repos>
 	 	Frequency 1
+		Phase 0
 		Fulls 10
 	</SubversionDir>
 	
 	# store a full dump of a specific Subversion repo every day, keeping 10.
 	<Subversion /home/svn/repos/myproject>
 	 	Frequency 1
+		Phase 0
 		Fulls 10
 	</Subversion>
 

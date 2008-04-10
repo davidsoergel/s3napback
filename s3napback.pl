@@ -154,10 +154,11 @@ sub processBlock()
 			}
 
 		my $frequency = $block->get("Frequency");
+		my $phase = $block->get("Phase");
 		my $diffs = $block->get("Diffs");
 		my $fulls = $block->get("Fulls");
 	
-		backupDirectory($name, $frequency, $diffs, $fulls);
+		backupDirectory($name, $frequency, $phase, $diffs, $fulls);
   	}
     	
     for my $name ($config->get("Subversion"))
@@ -167,14 +168,16 @@ sub processBlock()
 		my $block = $config;
 		if(ref($name) eq 'ARRAY')
 			{
+			print($name->[1] . " => " . $name->[2] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
 			}
 
-    	my $frequency = $block->get("frequency");
+    	my $frequency = $block->get("Frequency");
+		my $phase = $block->get("Phase");
     	my $fulls = $block->get("Fulls");
     
-    	backupSubversion($name, $frequency, $fulls);
+    	backupSubversion($name, $frequency, $phase, $fulls);
     	}
     
     for my $name ($config->get("SubversionDir"))
@@ -186,10 +189,11 @@ sub processBlock()
 			$name = $name->[1];
 			}
 
-    	my $frequency = $block->get("frequency");
+    	my $frequency = $block->get("Frequency");
+		my $phase = $block->get("Phase");
     	my $fulls = $block->get("Fulls");
     
-    	backupSubversionDir($name, $frequency, $fulls);
+    	backupSubversionDir($name, $frequency, $phase, $fulls);
     	}
  
     for my $name ($config->get("MySQL"))
@@ -201,19 +205,20 @@ sub processBlock()
 			$name = $name->[1];
 			}
 
-    	my $frequency = $block->get("frequency");
+    	my $frequency = $block->get("Frequency");
+		my $phase = $block->get("Phase");
     	my $fulls = $block->get("Fulls");
     
-    	backupMysql($name, $frequency, $fulls);
+    	backupMysql($name, $frequency, $phase, $fulls);
     	}
 
 	}	
 	
 sub backupDirectory
 	{
-	my ($name, $frequency, $diffs, $fulls) = @_;
+	my ($name, $frequency, $phase, $diffs, $fulls) = @_;
 	
-	if($yday % $frequency != 0)
+	if(($yday + $phase) % $frequency != 0)
 		{
 		print "Skipping $name\n";
 		next;
@@ -226,7 +231,7 @@ sub backupDirectory
 		{	
 		my ($sec,$min,$hour,$mday,$mon,$year,$wday,$diffyday,$isdst) = localtime($sb->mtime);
 	
-		if ( $diffyday == $yday )
+		if ( $diffyday == ($yday + $phase) )
 			{
 			print "Skipping $name; diff was already performed today\n";
 			next;
@@ -234,7 +239,7 @@ sub backupDirectory
 		}
 		
 	my $cycles = $fulls * $diffs;
-	my $cyclenum = ($yday / $frequency) % $cycles;
+	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	my $type = "DIFF";
 
@@ -254,16 +259,16 @@ sub backupDirectory
 	
 sub backupMysql
 	{
-	my ($name, $frequency, $fulls) = @_;
+	my ($name, $frequency, $phase, $fulls) = @_;
 	
-	if($yday % $frequency != 0)
+	if(($yday + $phase) % $frequency != 0)
 		{
 		print "Skipping $name\n";
 		next;
 		}
 	
 	my $cycles = $fulls;
-	my $cyclenum = ($yday / $frequency) % $cycles;
+	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
 	print "MySQL $name -> $bucketfullpath\n";
@@ -276,16 +281,16 @@ sub backupMysql
 	
 sub backupSubversion
 	{
-	my ($name, $frequency, $fulls) = @_;
+	my ($name, $frequency, $phase, $fulls) = @_;
 	
-	if($yday % $frequency != 0)
+	if(($yday + $phase) % $frequency != 0)
 		{
 		print "Skipping $name\n";
 		next;
 		}
 	
 	my $cycles = $fulls;
-	my $cyclenum = ($yday / $frequency) % $cycles;
+	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	my $datasource = "svnadmin -q dump $name";
 	my $bucketfullpath = "$bucket:$name-$cyclenum";
@@ -297,9 +302,9 @@ sub backupSubversion
 		
 sub backupSubversionDir
 	{
-	my ($name, $frequency, $fulls) = @_;
+	my ($name, $frequency, $phase, $fulls) = @_;
 	
-	if($yday % $frequency != 0)
+	if(($yday + $phase) % $frequency != 0)
 		{
 		print "Skipping $name\n";
 		next;
@@ -308,7 +313,7 @@ sub backupSubversionDir
 	# inspired by https://popov-cs.grid.cf.ac.uk/subversion/WeSC/scripts/svn_backup
 	
 	my $cycles = $fulls;
-	my $cyclenum = ($yday / $frequency) % $cycles;
+	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	opendir(DIR, $name);
 	my @subdirs = readdir(DIR);
