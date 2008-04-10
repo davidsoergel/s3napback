@@ -171,7 +171,7 @@ sub processBlock()
 			{
 				
 			# avoid confusion with SubversionDir
-			if($name->[0] ne "Subversion")
+			if($name->[0] ne "subversion")
 				{
 				next;
 				}
@@ -194,7 +194,7 @@ sub processBlock()
 		if(ref($name) eq 'ARRAY')
 			{
 			# avoid confusion with Subversion
-			if($name->[0] ne "SubversionDir")
+			if($name->[0] ne "subversiondir")
 				{
 				next;
 				}
