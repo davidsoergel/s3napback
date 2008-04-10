@@ -217,7 +217,7 @@ sub processBlock()
 		if(ref($name) eq 'ARRAY')
 			{
 			print($name->[0] . " => " . $name->[1] . "\n");
-			$block = $config->block($name);
+			$block = $config->block($name) || $config->block($name->[0]) ;
 			$name = $name->[1];
 			}
 
