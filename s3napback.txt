@@ -15,7 +15,7 @@ The design requirements were:
 
 As far as I could tell, no available backup script (including, e.g. s3sync, backup-manager, s3backup, etc. etc.) met all four requirements.
 
-The closest thing is js3tream, which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested] (http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce s3backup-gpg-streaming.sh.
+The closest thing is [js3tream](http://js3tream.sourceforge.net), which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested] (http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce s3backup-gpg-streaming.sh.
 
 That's not the end of the story, though, since it leaves open the problem of managing the backup rotation.  I found the explicit cron jobs suggested on the js3tream site too messy, especially since I sometimes want to back up a lot of different directories.  Some other available solutions will send incremental backups to S3, but never purge the old ones, and so use ever more storage.
 
@@ -31,29 +31,51 @@ I wrote s3napback.pl, which wraps js3tream and solves all of the above issues by
 * Automatic rotation of backup sets
 * Alternation of full and incremental backups (using "tar -g")
 * Integrated GPG encryption
-* No temporary files used anywhere, only pipes and TCP streams
+* No temporary files used anywhere, only pipes and TCP streams (optionally, uses smallish temp files to save memory)
 * Integrated handling of MySQL dumps
 * Integrated handling of Subversion repositories, and of directories containing multiple Subversion repositories.
 
 It's not rocket science, just a wrapper that makes things a bit easier.
 
 
+Prerequisites
+-------------
+
+* Java 1.5 or above
+* gpg
+
+
 Installation
 ------------
 
-First you'll need [js3tream](http://js3tream.sourceforge.net).  Once you've downloaded and extracted it somewhere, configure it with your S3 login information by creating a file called e.g. key.txt containing
+Download and extract the s3napback package.
+
+Configure it with your S3 login information by creating a file called e.g. key.txt containing
 
 	key=your AWS key
 	secret=your AWS secret
 
-Then download s3napback.pl and put it in the js3tream directory.
+You'll need a GPG key pair for encryption.  Create it with
+
+***
+
+Since you'll need the secret key to decrypt your backups, you'll obviously need to store it in a safe place (see http://www.gnupg.org/gph/en/manual/c481.html)
+
+If you'll be backing up a different machine from the one where you generated the key pair, export the public key and import it on the machine to be backed up:
+
+***
+
+gpg --import backup.pubkey
+gpg --edit-key backup@example.com
+then "trust"
+
 
 Create a configuration file something like this (descriptions of the options follow, if they're not entirely obvious):
 
-	DiffDir /home/s3backup/diffs
+	DiffDir /home/s3napback/diffs
 	Bucket dev.davidsoergel.com.backup1
 	GpgRecipient backup@davidsoergel.com
-	S3Keyfile /home/s3backup/key.txt
+	S3Keyfile /home/s3napback/key.txt
 	ChunkSize 25000000
 	
 	NotifyEmail me@example.com      # not implemented yet
@@ -98,6 +120,21 @@ Create a configuration file something like this (descriptions of the options fol
 		Phase 0
 		Diffs 7
 		Fulls 8
+		
+		Exclude /home/foobar/wumpus
+	</Directory>
+		
+	# backup an entire machine
+	<Directory />
+		Frequency 1
+		Phase 0
+		Diffs 7
+		Fulls 8
+		
+		Exclude /proc
+		Exclude /dev
+		Exclude /sys
+		Exclude /tmp
 	</Directory>
 		
 	# store a MySQL dump of all databases every day, keeping 14.
@@ -128,9 +165,9 @@ Create a configuration file something like this (descriptions of the options fol
 		Fulls 10
 	</Subversion>
 
-To run it, just pipe the config file into the script:
+To run it, just run the script, passing the config file with the -c option:
 
-	./s3snap.pl < s3snap.conf
+	./s3snapback.pl -c s3snap.conf
 
 That's it!  You can put that command in a cron job to run once a day.
 
@@ -209,5 +246,6 @@ Future Improvements
 * Code could be a lot cleaner, handle errors better, etc.
 * Rotation schedule should be made decaying somehow
 * S3 uploads could be done in parallel, since that can speed things up a lot
+* Recovery could be automated
 
 Please let me know if you make these or any other improvements!
