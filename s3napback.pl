@@ -183,7 +183,7 @@ sub processBlock()
 		my $fulls = $block->get("Fulls");
 		my @excludes = $block->get("Exclude");
 	
-		backupDirectory($name, $frequency, $phase, $diffs, $fulls);
+		backupDirectory($name, $frequency, $phase, $diffs, $fulls, @excludes);
   	}
     	
     for my $name ($config->get("Subversion"))
@@ -398,7 +398,8 @@ sub sendToS3
 		print "$delete_from_s3 $bucketfullpath\n";
 		print "$datasource | $encrypt | $send_to_s3 $bucketfullpath\n\n";
 		}
-	else
+
+	if(!$opt{t})
 		{
 		# delete the bucket if it exists
 		`$delete_from_s3 $bucketfullpath`;
