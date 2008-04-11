@@ -181,6 +181,7 @@ sub processBlock()
 		my $phase = $block->get("Phase");
 		my $diffs = $block->get("Diffs");
 		my $fulls = $block->get("Fulls");
+		my @excludes = $block->get("Exclude");
 	
 		backupDirectory($name, $frequency, $phase, $diffs, $fulls);
   	}
@@ -255,7 +256,7 @@ sub processBlock()
 	
 sub backupDirectory
 	{
-	my ($name, $frequency, $phase, $diffs, $fulls) = @_;
+	my ($name, $frequency, $phase, $diffs, $fulls, @excludes) = @_;
 	
 	if(($yday + $phase) % $frequency != 0)
 		{
@@ -289,8 +290,15 @@ sub backupDirectory
 		$type = "FULL";
 		unlink $difffile;
 		}
+		
+	my $excludes = "";
 	
-	my $datasource = "tar -g $difffile -C / -czp $name";
+	for my $exclude (@excludes)
+		{
+		$excludes .= " --exclude $exclude";
+		}
+	
+	my $datasource = "tar $excludes -g $difffile -C / -czp $name";
 	my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
 	print "Directory $name -> $bucketfullpath\n";
