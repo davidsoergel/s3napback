@@ -279,12 +279,12 @@ sub backupDirectory
 			}
 		}
 		
-	my $cycles = $fulls * $diffs;
+	my $cycles = $fulls * ($diffs + 1);
 	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	my $type = "DIFF";
 
-	if($cyclenum % $fulls == 0)
+	if($cyclenum % ($diffs + 1) == 0)
 		{
 		$type = "FULL";
 		unlink $difffile;
