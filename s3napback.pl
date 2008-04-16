@@ -302,7 +302,7 @@ sub backupDirectory
 	my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
 	print "Directory $name -> $bucketfullpath\n";
-	sendToS3($name, $datasource, $bucketfullpath);
+	sendToS3($datasource, $bucketfullpath);
 	}
 	
 	
@@ -319,8 +319,7 @@ sub backupMysql
 	my $cycles = $fulls;
 	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
-	my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
-	print "MySQL $name -> $bucketfullpath\n";
+
 	
 	my $socket = "";
 	my $socketopt = "";
@@ -337,7 +336,10 @@ sub backupMysql
 		{
 		$name = "$socket/$name";
 		}
-	sendToS3($name, $datasource, $bucketfullpath);
+		
+	my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
+	print "MySQL $name -> $bucketfullpath\n";
+	sendToS3($datasource, $bucketfullpath);
 	}
 	
 	
@@ -358,7 +360,7 @@ sub backupSubversion
 	my $bucketfullpath = "$bucket:$name-$cyclenum";
 	
 	print "Subversion $name -> $bucketfullpath\n";
-	sendToS3($name, $datasource, $bucketfullpath);
+	sendToS3($datasource, $bucketfullpath);
 	}
 	
 		
@@ -390,7 +392,7 @@ sub backupSubversionDir
 			my $bucketfullpath = "$bucket:$name/$subdir-$cyclenum";
 			
 			print "Subversion $name/$subdir -> $bucketfullpath\n";
-			sendToS3($name, $datasource, $bucketfullpath);
+			sendToS3($datasource, $bucketfullpath);
 			}
 		}
 	}
@@ -398,7 +400,7 @@ sub backupSubversionDir
 
 sub sendToS3
 	{
-	my ($name,$datasource,$bucketfullpath) = @_;
+	my ($datasource,$bucketfullpath) = @_;
 	
 	if($isAlreadyDoneToday{$bucketfullpath} && !$opt{f})
 		{
@@ -427,7 +429,7 @@ sub sendToS3
 	
 		if($? != 0)
 			{
-			print("Backup of $name failed: $!\n");
+			print("Backup to $bucketfullpath failed: $!\n");
 			print("Deleting any partial backup\n");
 		
 			# delete the bucket if it exists
