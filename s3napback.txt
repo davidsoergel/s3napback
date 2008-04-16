@@ -239,6 +239,10 @@ Recovery is not automated, but if you need it, you'll be motivated to follow thi
 
 To retrieve a backup, use js3tream to download the files you need, then decrypt them with GPG, then extract the tarballs.  Always start with the most recent FULL backup, then apply all available diffs in date order, regardless of the slot number.
 
+The procedure will be something along these lines:
+
+	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz
+
 
 Future Improvements
 -------------------

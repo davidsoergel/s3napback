@@ -322,8 +322,14 @@ sub backupMysql
 	my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
 	print "MySQL $name -> $bucketfullpath\n";
 	
+	undef $socket;
+	if($name =! /(.*):(.*)/)
+		{
+		$socket = "--socket $1";
+		$name = $2;
+		}
 	if($name eq "all") { $name = "--all-databases"; }
-	my $datasource = "mysqldump --opt $name | gzip";
+	my $datasource = "mysqldump --opt $socket $name | gzip";
 	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
