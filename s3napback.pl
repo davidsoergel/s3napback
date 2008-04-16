@@ -324,7 +324,7 @@ sub backupMysql
 	
 	my $socket = "";
 	my $socketopt = "";
-	if($name =! /(.*):(.*)/)
+	if($name =~ /(.*):(.*)/)
 		{
 		$socket = $1;
 		$socketopt = "--socket $1";
