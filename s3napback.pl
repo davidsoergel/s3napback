@@ -322,7 +322,8 @@ sub backupMysql
 	my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
 	print "MySQL $name -> $bucketfullpath\n";
 	
-	undef $socket;
+	my $socket = "";
+	my $socketopt = "";
 	if($name =! /(.*):(.*)/)
 		{
 		$socket = $1;
