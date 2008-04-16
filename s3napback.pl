@@ -325,11 +325,17 @@ sub backupMysql
 	undef $socket;
 	if($name =! /(.*):(.*)/)
 		{
-		$socket = "--socket $1";
+		$socket = $1;
+		$socketopt = "--socket $1";
 		$name = $2;
 		}
 	if($name eq "all") { $name = "--all-databases"; }
-	my $datasource = "mysqldump --opt $socket $name | gzip";
+	my $datasource = "mysqldump --opt $socketopt $name | gzip";
+	
+	if($socket)
+		{
+		$name = "$socket/$name";
+		}
 	sendToS3($name, $datasource, $bucketfullpath);
 	}
 	
