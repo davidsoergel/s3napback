@@ -3,9 +3,9 @@
 # s3snap.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Copyright (c) 2001-2007 David Soergel
+# Copyright (c) 2008 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
-# david@davidsoergel.com
+# dev@davidsoergel.com
 #
 # All rights reserved.
 #
@@ -117,6 +117,12 @@ for my $configfile (@configs)
 	$bucket = $mainConfig->get("Bucket");
 	$bucket || die "Bucket must be defined.";
 	
+	my $keyring = $mainConfig->get("GpgKeyring");
+	if($keyring)
+		{
+		$keyring = "--keyring $keyring";
+		}
+
 	my $recipient = $mainConfig->get("GpgRecipient");
 	$recipient || die "GpgRecipient must be defined.";
 
@@ -130,8 +136,18 @@ for my $configfile (@configs)
 	#my $logfile = $mainConfig->get("LogFile");
 	#my $loglevel = $mainConfig->get("LogLevel");
 
+	# check gpg key availability
+		
+	$checkgpg=`gpg --batch $keyring --list-public-keys`;
+	if($checkgpg =~ /$recipient/)
+		{
+		die "Requested GPG public key not found: $recipient";
+		}
+
+
 	# setup commands (this is the crux of the matter)
-	$encrypt="gpg -r $recipient -e";
+	
+	$encrypt="gpg --batch $keyring -r $recipient -e";
 	$send_to_s3="java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b"; # -Xmx128M 
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 	

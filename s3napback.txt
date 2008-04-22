@@ -171,6 +171,8 @@ To run it, just run the script, passing the config file with the -c option:
 
 That's it!  You can put that command in a cron job to run once a day.
 
+Note that gpg will look for a keyring under ~/.gnupg, but on some systems /etc/crontab sets the HOME environment variable to "/".  So, you may want to change that to "/root"; or actually create and populate /.gnupg; or just use the GpgKeyring option in the s3napback config file to specify a keyring explicitly.
+
 
 Priniciples of operation
 ------------------------
@@ -243,6 +245,9 @@ The procedure will be something along these lines:
 
 	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz
 
+Note that because of the streaming nature of all this, you can extract part of an archive even if there's not enough disk space to store the entire archive.  You'll still have to download the whole thing, unfortunately, since it's only at the tar stage that you can select what files will be restored.
+
+	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz
 
 Future Improvements
 -------------------
