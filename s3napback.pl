@@ -138,7 +138,7 @@ for my $configfile (@configs)
 
 	# check gpg key availability
 		
-	$checkgpg=`gpg --batch $keyring --list-public-keys`;
+	my $checkgpg=`gpg --batch $keyring --list-public-keys`;
 	if($checkgpg =~ /$recipient/)
 		{
 		die "Requested GPG public key not found: $recipient";
