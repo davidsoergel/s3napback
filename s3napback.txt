@@ -15,7 +15,7 @@ The design requirements were:
 
 As far as I could tell, no available backup script (including, e.g. s3sync, backup-manager, s3backup, etc. etc.) met all four requirements.
 
-The closest thing is [js3tream](http://js3tream.sourceforge.net), which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested] (http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce s3backup-gpg-streaming.sh.
+The closest thing is [js3tream](http://js3tream.sourceforge.net), which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested] (http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce [s3backup-gpg-streaming.sh](s3backup-gpg-streaming.sh).
 
 That's not the end of the story, though, since it leaves open the problem of managing the backup rotation.  I found the explicit cron jobs suggested on the js3tream site too messy, especially since I sometimes want to back up a lot of different directories.  Some other available solutions will send incremental backups to S3, but never purge the old ones, and so use ever more storage.
 
@@ -45,29 +45,31 @@ Prerequisites
 * gpg
 
 
-Installation
-------------
+Quick Start
+-----------
 
-Download and extract the s3napback package.
+Download and extract the s3napback package.  There's no "make" or any such needed, so just extract it to some convenient location (I use /home/s3napback).
 
-Configure it with your S3 login information by creating a file called e.g. key.txt containing
+Configure it with your S3 login information by creating a file called e.g. /home/s3napback/key.txt containing
 
 	key=your AWS key
 	secret=your AWS secret
 
 You'll need a GPG key pair for encryption.  Create it with
 
-***
+	gpg --gen-key
 
-Since you'll need the secret key to decrypt your backups, you'll obviously need to store it in a safe place (see http://www.gnupg.org/gph/en/manual/c481.html)
+Since you'll need the secret key to decrypt your backups, you'll obviously need to store it in a safe place (see [the GPG manual](http://www.gnupg.org/gph/en/manual/c481.html))
 
-If you'll be backing up a different machine from the one where you generated the key pair, export the public key and import it on the machine to be backed up:
+If you'll be backing up a different machine from the one where you generated the key pair, export the public key:
 
-***
+	gpg --export me@example.com > backup.pubkey
 
-gpg --import backup.pubkey
-gpg --edit-key backup@example.com
-then "trust"
+and import it on the machine to be backed up:
+
+	gpg --import backup.pubkey
+	gpg --edit-key backup@example.com
+	then "trust"
 
 
 Create a configuration file something like this (descriptions of the options follow, if they're not entirely obvious):
@@ -199,39 +201,51 @@ First off you'll need some general configuration statements:
 
 * DiffDir
 	a directory where tar can store its diff files (necessary for incremental backups).
+
 * Bucket
  	the destination bucket on S3.
+
 * GpgRecipient
 	the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.
+
 * S3KeyFile
 	the file containing your AWS authentication keys.
+
 * ChunkSize
 	the size of the chunks to be stored on S3, in bytes.
 
 Then you can specify as many directories, databases, and repositories as you like to be backed up.  These may be contained in <Cycle> blocks, for the sake of reusing timing configuration, or may be blocks themselves with individual timings.
 
-* Directory <name> <frequency> <diffs> <fulls>
-	<name> a directory to be backed up
-	<frequency> tells how often this directory should be backed up at all, in days.
-	<diffs> tells how long the cycle between full backups should be.  (Really there will be one fewer diffs than this, since the full backup that starts the cycle itself counts as one).
-	<fulls> tells how many total cycles to keep.
-* MySQL <databasename> <frequency> 0 <fulls>
+* <Cycle name>
+	<name>  a unique identifier for the cycle.  This is not used except to establish the uniqueness of each block.
+
+* Frequency <days> tells how often a backup should be made at all, in days.
+
+* Phase <days> Allows adjusting the day on which the backup is made, with respect to the frequency.  Can take values 0 <= Phase < Frequency; defaults to 0.  This can be useful, for instance, if you want to alternate daily backups between two backup sets.  This can be accomplished by creating two nearly identical backup specifications, both with Frequency 2, but where one has a Phase of 0 and the other has a Phase of 1.
+
+* Diffs <number> tells how long the cycle between full backups should be.  (Really there will be one fewer diffs than this, since the full backup that starts the cycle itself counts as one).
+
+* Fulls <number> tells how many total cycles to keep.
+
+* Directory <name>    or    <Directory name>
+	<name>	a directory to be backed up
+	May appear as a property within a cycle block, or as a block in its own right, e.g. <Directory /some/path>.  The latter case is just a shorthand for a cycle block containing a single Directory property.
+
+* MySQL <databasename>    or    <MySQL databasename>
 	In order for this to work, the user you're running the script as must be able to mysqldump the requested databases without entering a password.  This can be accomplished through the use of a .my.cnf file in the user's home directory.
 	<databasename> names a single database to be backed up, or "all" to dump all databases.
-	<frequency> tells how often the backup should be made, in days.
-	the "diffs" parameter is ignored, since mysql dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
-	<fulls> tells how many backups should be kept.		
-* Subversion <repository> <frequency> 0 <fulls>
+	the Diffs property is ignored, since mysql dumps are always "full".
+
+* Subversion <repository>    or    <Subversion repository>
+	In order for this to work, the user you're running the script as must have permission to svnadmin dump the requested repository.
 	<repository> names a single svn repository to be backed up.
-	<frequency> tells how often the backup should be made, in days.
-	the "diffs" parameter is ignored, since svnadmin dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
-	<fulls> tells how many backups should be kept.
-* SubversionDir <repository-dir> <frequency> 0 <fulls>
+	the Diffs property is ignored, since svnadmin dumps are always "full".
+
+* SubversionDir <repository-dir>    or    <SubversionDir repository-dir>
 	<repository-dir> a directory containing multiple subversion repositories, all of which should be backed up
-	<frequency> tells how often the backup should be made, in days.
-	the "diffs" parameter is ignored, since mysql dumps are always "full".  You still need something there for the sake of consistent syntax; I just put "0".
-	<fulls> tells how many backups should be kept.
+	the Diffs property is ignored, since svnadmin dumps are always "full".
 	(this feature was inspired by http://www.hlynes.com/2006/10/01/backups-part-2-subversion)
+
 
 
 Recovery
@@ -245,9 +259,9 @@ The procedure will be something along these lines:
 
 	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz
 
-Note that because of the streaming nature of all this, you can extract part of an archive even if there's not enough disk space to store the entire archive.  You'll still have to download the whole thing, unfortunately, since it's only at the tar stage that you can select what files will be restored.
+Note that because of the streaming nature of all this, you can extract part of an archive even if there's not enough disk space to store the entire archive.  You'll still have to download the whole thing, unfortunately, since it's only at the tar stage that you can select which files will be restored.
 
-	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz
+	java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz /path/to/desired/file
 
 Future Improvements
 -------------------

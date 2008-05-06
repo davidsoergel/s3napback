@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# s3snap.pl
+# s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
 # Copyright (c) 2008 David Soergel
@@ -50,19 +50,21 @@ my $send_to_s3;
 my %isAlreadyDoneToday= {};
 
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-
 $year += 1900;
 $mon += 1;
-
 my $datestring = time2str("%Y-%m-%d", time);
+
+
+###### Print the header  
 	
 print "\n\n\n";
 print "------------------------------------------------------------------\n";
 print "Starting s3napback  $datestring   $hour:$min\n\n";
 
+
+###### Process command-line Arguments + Options
+
 my %opt;
-#---------- ---------- ---------- ---------- ---------- ----------
-# Process command-line Arguments + Options
 getopts('c:td', \%opt) ||  die usage();
 
 #if($opt{h}) {
@@ -78,22 +80,27 @@ if($opt{t})
 	}
 
 
+###### Find config files
 
+my @configs;
 
-my @configs; 
+# Hmm, does Getopt::Std modify @ARGV to contain only what it didn't parse, or are we here looking at the whole thing?
+# (doesn't really matter in practice)
 
 for(@ARGV) {
-	if(-f "/etc/snapback/$_.conf") {
-		push @configs, "/etc/snapback/$_.conf";
+	if(-f "/etc/s3napback/$_.conf") {
+		push @configs, "/etc/s3napback/$_.conf";
 	}
-	elsif(-f "/etc/snapback/$_") {
-		push @configs, "/etc/snapback/$_";
-	}
-	
+	elsif(-f "/etc/s3napback/$_") {
+		push @configs, "/etc/s3napback/$_";
+	}	
 }
 
 unshift @configs, $opt{c} if $opt{c};
 @configs = '' unless @configs;
+
+
+###### Parse config files
 
 for my $configfile (@configs)
 	{
@@ -136,29 +143,31 @@ for my $configfile (@configs)
 	#my $logfile = $mainConfig->get("LogFile");
 	#my $loglevel = $mainConfig->get("LogLevel");
 
-	# check gpg key availability
+
+	###### Check gpg key availability
 		
 	my $checkgpg=`gpg --batch $keyring --list-public-keys`;
-	if($checkgpg =~ /$recipient/)
+	if(!($checkgpg =~ /$recipient/))
 		{
 		die "Requested GPG public key not found: $recipient";
 		}
 
 
-	# setup commands (this is the crux of the matter)
+	###### Setup commands (this is the crux of the matter)
 	
 	$encrypt="gpg --batch $keyring -r $recipient -e";
 	$send_to_s3="java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b"; # -Xmx128M 
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 	
 	
-	# check what has already been done
+	###### Check what has already been done
+	
 	my $list_s3_bucket="java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 	
 	print("Getting current contents of bucket $bucket modified on $datestring...\n");
 	my @bucketlist = `$list_s3_bucket`;
 	
-	my @alreadyDoneToday = grep $datestring, @bucketlist;
+	my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
 	
 	# 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
 	@alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp; $_ } @alreadyDoneToday;
@@ -166,6 +175,9 @@ for my $configfile (@configs)
 	print "Buckets already done today: \n";
 	map { print; print "\n"; } @alreadyDoneToday;
 	for (@alreadyDoneToday) { $isAlreadyDoneToday{$_} = 1; }
+
+
+	###### Perform the requested operations
 
 	processBlock($mainConfig);
 
