@@ -1,5 +1,10 @@
-Cycling, Incremental, Compressed, Encrypted Backups on Amazon S3
-================================================================
+s3napback: Cycling, Incremental, Compressed, Encrypted Backups on Amazon S3
+===========================================================================
+
+Manual for version 1.0
+2008-05-07
+Copyright (c) 2008 David Soergel <dev@davidsoergel.com>
+
 
 The problem
 -----------
@@ -207,6 +212,9 @@ First off you'll need some general configuration statements:
 
 * GpgRecipient
 	the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.
+
+* GpgKeyring
+	path to the keyring file containing the public key for the GpgRecipient.  Defaults to ~/.gnupg/pubring.gpg
 
 * S3KeyFile
 	the file containing your AWS authentication keys.
