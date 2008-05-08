@@ -131,7 +131,8 @@ for my $configfile (@configs)
 		}
 
 	my $recipient = $mainConfig->get("GpgRecipient");
-	$recipient || die "GpgRecipient must be defined.";
+	# $recipient || die "GpgRecipient must be defined.";
+	# Empty recipient OK; in that case we just won't use GPG.
 
 	my $s3keyfile = $mainConfig->get("S3Keyfile");
 	$s3keyfile || die "S3Keyfile must be defined.";
@@ -147,7 +148,7 @@ for my $configfile (@configs)
 	###### Check gpg key availability
 		
 	my $checkgpg=`gpg --batch $keyring --list-public-keys`;
-	if(!($checkgpg =~ /$recipient/))
+	if(defined $recipient && !($checkgpg =~ /$recipient/))
 		{
 		die "Requested GPG public key not found: $recipient";
 		}
@@ -155,8 +156,12 @@ for my $configfile (@configs)
 
 	###### Setup commands (this is the crux of the matter)
 	
-	$encrypt="gpg --batch $keyring -r $recipient -e";
-	$send_to_s3="java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b"; # -Xmx128M 
+	if(defined $recipient)
+		{	
+		$encrypt="| gpg --batch $keyring -r $recipient -e";
+		}
+		
+	$send_to_s3="| java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b"; # -Xmx128M 
 	$delete_from_s3="java -jar js3tream.jar -v -K $s3keyfile -d -b";
 	
 	
@@ -439,7 +444,7 @@ sub sendToS3
 	if($opt{t} || $opt{d})
 		{
 		print "$delete_from_s3 $bucketfullpath\n";
-		print "$datasource | $encrypt | $send_to_s3 $bucketfullpath\n\n";
+		print "$datasource $encrypt $send_to_s3 $bucketfullpath\n\n";
 		}
 
 	if(!$opt{t})
@@ -453,7 +458,7 @@ sub sendToS3
 			}
 		
 		# stream the data
-		`$datasource | $encrypt | $send_to_s3 $bucketfullpath`;
+		`$datasource $encrypt $send_to_s3 $bucketfullpath`;
 	
 		if($? != 0)
 			{
