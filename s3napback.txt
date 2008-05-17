@@ -99,7 +99,6 @@ Create a configuration file something like this (descriptions of the options fol
 		Directory /etc
 		Directory /home/build
 		Directory /home/notebook
-		Directory /home/s3backup
 		Directory /home/trac
 		Directory /usr
 		Directory /var
