@@ -53,9 +53,9 @@ Prerequisites
 Quick Start
 -----------
 
-Download and extract the s3napback package.  There's no "make" or any such needed, so just extract it to some convenient location (I use /home/s3napback).
+Download and extract the s3napback package.  There's no "make" or any such needed, so just extract it to some convenient location (I use /usr/local/s3napback).
 
-Configure it with your S3 login information by creating a file called e.g. /home/s3napback/key.txt containing
+Configure it with your S3 login information by creating a file called e.g. /usr/local/s3napback/key.txt containing
 
 	key=your AWS key
 	secret=your AWS secret
@@ -79,10 +79,10 @@ and import it on the machine to be backed up:
 
 Create a configuration file something like this (descriptions of the options follow, if they're not entirely obvious):
 
-	DiffDir /home/s3napback/diffs
+	DiffDir /usr/local/s3napback/diffs
 	Bucket dev.davidsoergel.com.backup1
 	GpgRecipient backup@davidsoergel.com
-	S3Keyfile /home/s3napback/key.txt
+	S3Keyfile /usr/local/s3napback/key.txt
 	ChunkSize 25000000
 	
 	NotifyEmail me@example.com      # not implemented yet
