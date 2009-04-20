@@ -3,7 +3,9 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Copyright (c) 2008 David Soergel
+# Version 1.02
+#
+# Copyright (c) 2008-2009 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
 # dev@davidsoergel.com
 #
@@ -218,21 +220,14 @@ sub processBlock()
 	
 		backupDirectory($name, $frequency, $phase, $diffs, $fulls, @excludes);
   	}
-    	
+	
     for my $name ($config->get("Subversion"))
     	{
     	#print "Subversion $name\n";
 
 		my $block = $config;
 		if(ref($name) eq 'ARRAY') 
-			{
-				
-			# avoid confusion with SubversionDir
-	#		if($name->[0] ne "subversion")
-	#			{
-	#			next;
-	#			}
-				
+			{	
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
@@ -240,22 +235,17 @@ sub processBlock()
 
     	my $frequency = $block->get("Frequency");
 		my $phase = $block->get("Phase");
+		my $diffs     = $block->get("Diffs");
     	my $fulls = $block->get("Fulls");
     
-    	backupSubversion($name, $frequency, $phase, $fulls);
+    	backupSubversion($name, $frequency, $phase, $diffs, $fulls);
     	}
     
     for my $name ($config->get("SubversionDir"))
     	{
 		my $block = $config;
 		if(ref($name) eq 'ARRAY')
-			{
-			# avoid confusion with Subversion
-	#		if($name->[0] ne "subversiondir")
-	#			{
-	#			next;
-	#			}
-				
+			{				
 			print($name->[0] . " => " . $name->[1] . "\n");
 			$block = $config->block($name);
 			$name = $name->[1];
@@ -263,9 +253,10 @@ sub processBlock()
 
     	my $frequency = $block->get("Frequency");
 		my $phase = $block->get("Phase");
+		my $diffs     = $block->get("Diffs");
     	my $fulls = $block->get("Fulls");
     
-    	backupSubversionDir($name, $frequency, $phase, $fulls);
+    	backupSubversionDir($name, $frequency, $phase, $diffs, $fulls);
     	}
  
     for my $name ($config->get("MySQL"))
@@ -375,32 +366,33 @@ sub backupMysql
 	sendToS3($datasource, $bucketfullpath);
 	}
 	
-	
-sub backupSubversion
-	{
-	my ($name, $frequency, $phase, $fulls) = @_;
-	
-	if(($yday + $phase) % $frequency != 0)
-		{
-		print "Skipping $name\n";
-		next;
-		}
-	
-	my $cycles = $fulls;
-	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
-	
-	my $datasource = "svnadmin -q dump $name | gzip";
-	my $bucketfullpath = "$bucket:$name-$cyclenum";
-	
-	print "Subversion $name -> $bucketfullpath\n";
-	sendToS3($datasource, $bucketfullpath);
-	}
+# old version made only full backups, no diffs	
+# sub backupSubversion
+#	{
+#	my ($name, $frequency, $phase, $fulls) = @_;
+#	
+#	if(($yday + $phase) % $frequency != 0)
+#		{
+#		print "Skipping $name\n";
+#		next;
+#		}
+#	
+#	my $cycles = $fulls;
+#	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
+#	
+#	my $datasource = "svnadmin -q dump $name | gzip";
+#	my $bucketfullpath = "$bucket:$name-$cyclenum";
+#	
+#	print "Subversion $name -> $bucketfullpath\n";
+#	sendToS3($datasource, $bucketfullpath);
+#	}
 	
 		
 sub backupSubversionDir
 	{
-	my ($name, $frequency, $phase, $fulls) = @_;
+	my ($name, $frequency, $phase, $diffs, $fulls) = @_;
 	
+	# this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
 	if(($yday + $phase) % $frequency != 0)
 		{
 		print "Skipping $name\n";
@@ -408,9 +400,6 @@ sub backupSubversionDir
 		}
 	
 	# inspired by https://popov-cs.grid.cf.ac.uk/subversion/WeSC/scripts/svn_backup
-	
-	my $cycles = $fulls;
-	my $cyclenum = (($yday + $phase) / $frequency) % $cycles;
 	
 	opendir(DIR, $name);
 	my @subdirs = readdir(DIR);
@@ -421,15 +410,87 @@ sub backupSubversionDir
 		`svnadmin verify $name/$subdir >& /dev/null`;
 		if ($? == 0 )
 			{
-			my $datasource = "svnadmin -q dump $name/$subdir | gzip";
-			my $bucketfullpath = "$bucket:$name/$subdir-$cyclenum";
-			
-			print "Subversion $name/$subdir -> $bucketfullpath\n";
-			sendToS3($datasource, $bucketfullpath);
+			backupSubversion("$name/$subdir", $frequency, $phase, $diffs, $fulls);
 			}
 		}
 	}
-	
+
+#
+# Inspired by from http://le-gall.net/pierrick/blog/index.php/2007/04/17/98-subversion-incremental-backup
+# Adapted to s3napback by Kevin Ross - metova.com
+#
+sub backupSubversion {
+	my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
+
+	if ( ( $yday + $phase ) % $frequency != 0 ) {
+		print "Skipping $name\n";
+		next;
+	}
+
+	my $difffile = $name . ".diff";
+	$difffile =~ s/\//_/g;
+	$difffile = $diffdir . $difffile;
+
+	# initialize the last saved revision as -1, that way on the first pass it is simply incremented to 0 (the first revision).
+	my $lastSavedRevision = -1;
+
+	# check the time on any existing diff file to see if this was already done today.
+	my $sb = stat($difffile);
+	if ( defined $sb ) {
+		my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $diffyday, $isdst ) =
+		  localtime( $sb->mtime );
+
+		if ( $diffyday == ( $yday + $phase ) ) {
+			print "Skipping $name was already backed up today\n";
+			next;
+		}
+
+		# The diff file exists and we need to run, so read the last saved revision from the file
+		open( LAST_SAVED_REVISION, '<', $difffile );
+		$lastSavedRevision = <LAST_SAVED_REVISION>;
+		chomp $lastSavedRevision;
+		close(LAST_SAVED_REVISION);
+	}
+
+	# get informed of the current last revision (head)
+	my $headRevision = `svnlook youngest $name`;
+	chomp $headRevision;
+
+	my $cycles = $fulls * ( $diffs + 1 );
+	my $cyclenum = ( ( $yday + $phase ) / $frequency ) % $cycles;
+
+	my $type = "DIFF";
+
+	if ( $cyclenum % ( $diffs + 1 ) == 0  || $lastSavedRevision < 0) {
+		$type = "FULL";
+
+		# remove the diff file, we want to do a full backup.
+		unlink $difffile;
+	}
+
+	#	if ( $type == "DIFF" && $lastSavedRevision == $headRevision ) {
+	#
+	#		# of course, if the head is not younger than the last saved revision it's useless to go on backing up.
+	#		next;
+	#	}
+
+	# if the last saved is 1000 and the head is 1023, we want the backup from 1001 to 1023
+	my $fromRevision = $lastSavedRevision + 1;
+	my $toRevision   = $headRevision;
+
+	my $datasource = "svnadmin dump -q -r$fromRevision:$toRevision --incremental $name | gzip";
+	my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
+
+	print "Subversion $name -> $bucketfullpath\n";
+	sendToS3( $datasource, $bucketfullpath );
+
+	# Save last revision to the diff file so we know where to pick up later.
+	if ( !$opt{t}  ) {
+		open( LAST_SAVED_REVISION, '>', $difffile );
+		print LAST_SAVED_REVISION $toRevision, "\n";
+		close(LAST_SAVED_REVISION);
+	}
+}
 
 sub sendToS3
 	{
