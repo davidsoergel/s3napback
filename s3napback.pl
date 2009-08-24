@@ -36,6 +36,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use strict;
+use warnings;
+use Log::Log4perl;
 use Date::Format;
 use File::stat;
 use Getopt::Std;
@@ -58,11 +60,18 @@ $mon  += 1;
 my $datestring = time2str( "%Y-%m-%d", time );
 my $curPath = dirname( rel2abs($0) ) . "/";
 
+
+###### Setup logging
+
+my $conf_file = 's3napback.logconfig';
+Log::Log4perl->init( $conf_file );
+my $logger = Log::Log4perl::get_logger();
+
+
 ###### Print the header
 
-print "\n\n\n";
-print "------------------------------------------------------------------\n";
-print "Starting s3napback  $datestring   $hour:$min\n\n";
+$logger->info("Starting s3napback");
+
 
 ###### Process command-line Arguments + Options
 
@@ -77,7 +86,7 @@ getopts( 'c:td', \%opt ) || die usage();
 #my $debug = 0;
 
 if ( $opt{t} ) {
-    print "TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN\n\n";
+    $logger->warn("TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN");
 }
 
 ###### Find config files
@@ -146,7 +155,8 @@ for my $configfile (@configs) {
 
     my $checkgpg = `gpg --batch $keyring --list-public-keys`;
     if ( defined $recipient && !( $checkgpg =~ /$recipient/ ) ) {
-        die "Requested GPG public key not found: $recipient";
+		$logger->logdie("GPG recipient $recipient not found in $checkgpg");
+        #die "Requested GPG public key not found: $recipient";
     }
 
     ###### Setup commands (this is the crux of the matter)
@@ -162,17 +172,19 @@ for my $configfile (@configs) {
 
     my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 
-    print("Getting current contents of bucket $bucket modified on $datestring...\n");
+    $logger->info("Getting current contents of bucket $bucket modified on $datestring...\n");
     my @bucketlist = `$list_s3_bucket`;
+
+	$logger->debug(join "\n", @bucketlist);
 
     my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
 
     # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
     @alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp; $_ } @alreadyDoneToday;
 
-    print "Buckets already done today: \n";
-    map { print; print "\n"; } @alreadyDoneToday;
-    for (@alreadyDoneToday) { $isAlreadyDoneToday{$_} = 1; }
+    $logger->info("Buckets already done today: \n");
+    #map { print; print "\n"; } @alreadyDoneToday;
+    for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
 
     ###### Perform the requested operations
 
@@ -194,7 +206,7 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            print( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -214,7 +226,7 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            print( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -230,7 +242,7 @@ sub processBlock() {
     for my $name ( $config->get("SubversionDir") ) {
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            print( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -246,7 +258,7 @@ sub processBlock() {
     for my $name ( $config->get("MySQL") ) {
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            print( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -264,7 +276,7 @@ sub backupDirectory {
     my ( $name, $frequency, $phase, $diffs, $fulls, @excludes ) = @_;
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
-        print "Skipping $name\n";
+        $logger->warn("Skipping $name");
         return;
     }
 
@@ -277,7 +289,7 @@ sub backupDirectory {
         my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $diffyday, $isdst ) = localtime( $sb->mtime );
 
         if ( $diffyday == ( $yday + $phase ) ) {
-            print "Skipping $name; diff was already performed today\n";
+            $logger->warn("Skipping $name; diff was already performed today");
             return;
         }
     }
@@ -301,7 +313,7 @@ sub backupDirectory {
     my $datasource     = "tar $excludes -g $difffile -C / -czp $name";
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
-    print "Directory $name -> $bucketfullpath\n";
+    $logger->info("Directory $name -> $bucketfullpath");
     sendToS3( $datasource, $bucketfullpath );
 }
 
@@ -309,7 +321,7 @@ sub backupMysql {
     my ( $name, $frequency, $phase, $fulls ) = @_;
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
-        print "Skipping $name\n";
+        $logger->warn("Skipping $name");
         return;
     }
 
@@ -331,7 +343,7 @@ sub backupMysql {
     }
 
     my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
-    print "MySQL $name -> $bucketfullpath\n";
+    $logger->info("MySQL $name -> $bucketfullpath");
     sendToS3( $datasource, $bucketfullpath );
 }
 
@@ -361,7 +373,7 @@ sub backupSubversionDir {
 
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
     if ( ( $yday + $phase ) % $frequency != 0 ) {
-        print "Skipping $name\n";
+        $logger->warn("Skipping $name");
         return;
     }
 
@@ -372,7 +384,7 @@ sub backupSubversionDir {
     closedir(DIR);
 
     foreach my $subdir (@subdirs) {
-        `svnadmin verify $name/$subdir >& /dev/null`;
+        $logger->debug(`svnadmin verify $name/$subdir 2>&1 1>/dev/null`);
         if ( $? == 0 ) {
             backupSubversion( "$name/$subdir", $frequency, $phase, $diffs, $fulls );
         }
@@ -387,7 +399,7 @@ sub backupSubversion {
     my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
-        print "Skipping $name\n";
+        $logger->warn("Skipping $name");
         return;
     }
 
@@ -404,7 +416,7 @@ sub backupSubversion {
         my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $diffyday, $isdst ) = localtime( $sb->mtime );
 
         if ( $diffyday == ( $yday + $phase ) ) {
-            print "Skipping $name was already backed up today\n";
+            $logger->warn("Skipping $name -- was already backed up today");
             return;
         }
 
@@ -431,10 +443,13 @@ sub backupSubversion {
     # get informed of the current last revision (head)
     my $headRevision = `svnlook youngest $name`;
     chomp $headRevision;
+	
+	$logger->debug("Last revision of $name: $headRevision");
 
     if ( $type == "DIFF" && $lastSavedRevision == $headRevision ) {
 
         # of course, if the head is not younger than the last saved revision it's useless to go on backing up.
+		$logger->info("$name has no new revisions since last backup; skipping");
         return;
     }
 
@@ -445,7 +460,7 @@ sub backupSubversion {
     my $datasource     = "svnadmin dump -q -r$fromRevision:$toRevision --incremental $name | gzip";
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
-    print "Subversion $name -> $bucketfullpath\n";
+    $logger->info("Subversion $name -> $bucketfullpath");
     sendToS3( $datasource, $bucketfullpath );
 
     # Save last revision to the diff file so we know where to pick up later.
@@ -460,36 +475,36 @@ sub sendToS3 {
     my ( $datasource, $bucketfullpath ) = @_;
 
     if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
-        print "Skipping $bucketfullpath; already done today\n";
+        $logger->warn("Skipping $bucketfullpath -- already done today");
         return;
     }
 
     if ( $opt{t} || $opt{d} ) {
-        print "$delete_from_s3 $bucketfullpath\n";
-        print "$datasource $encrypt $send_to_s3 $bucketfullpath\n\n";
+        $logger->debug("$delete_from_s3 $bucketfullpath");
+        $logger->debug("$datasource $encrypt $send_to_s3 $bucketfullpath");
     }
 
     if ( !$opt{t} ) {
 
         # delete the bucket if it exists
-        `$delete_from_s3 $bucketfullpath`;
+        $logger->debug(`$delete_from_s3 $bucketfullpath`);
 
         if ( $? != 0 ) {
-            print("Could not delete old backup: $!\n");
+            $logger->error("Could not delete old backup: $!\n");
         }
 
         # stream the data
-        `$datasource $encrypt $send_to_s3 $bucketfullpath`;
+        $logger->debug(`$datasource $encrypt $send_to_s3 $bucketfullpath`);
 
         if ( $? != 0 ) {
-            print("Backup to $bucketfullpath failed: $!\n");
-            print("Deleting any partial backup\n");
+            $logger->error("Backup to $bucketfullpath failed: $!\n");
+            $logger->error("Deleting any partial backup\n");
 
             # delete the bucket if it exists
-            `$delete_from_s3 $bucketfullpath`;
+            $logger->debug(`$delete_from_s3 $bucketfullpath`);
 
             if ( $? != 0 ) {
-                print("Could not delete partial backup: $!\n");
+                $logger->error("Could not delete partial backup: $!\n");
             }
         }
     }

@@ -1,0 +1,56 @@
+log4perl.rootLogger = DEBUG, Screen, Logfile, Email
+
+# Syntax for conversion patterns:
+#     %c Category of the logging event.
+#     %C Fully qualified package (or class) name of the caller
+#     %d Current date in yyyy/MM/dd hh:mm:ss format
+#     %F File where the logging event occurred
+#     %H Hostname (if Sys::Hostname is available)
+#     %l Fully qualified name of the calling method followed by the
+#        callers source the file name and line number between 
+#        parentheses.
+#     %L Line number within the file where the log statement was issued
+#     %m The message to be logged
+#     %M Method or function where the logging request was issued
+#     %n Newline (OS-independent)
+#     %p Priority of the logging event
+#     %P pid of the current process 
+#     %r Number of milliseconds elapsed from program start to logging 
+#        event   
+#     %T A stack trace of functions called
+#     %x The topmost NDC (see below)
+#     %X{key} The entry 'key' of the MDC (see below)
+#     %% A literal percent (%) sign
+
+
+log4perl.appender.Screen        = Log::Log4perl::Appender::Screen 
+log4perl.appender.Screen.min_level=info
+log4perl.appender.Screen.layout = Log::Log4perl::Layout::PatternLayout
+log4perl.appender.Screen.layout.ConversionPattern = %d %p> %m%n
+
+log4perl.appender.Logfile = Log::Log4perl::Appender::File
+log4perl.appender.LogFile.min_level=info
+log4perl.appender.Logfile.filename = /var/log/s3napback.log
+log4perl.appender.Logfile.mode = append
+log4perl.appender.Logfile.layout = Log::Log4perl::Layout::PatternLayout
+log4perl.appender.Logfile.layout.ConversionPattern = %d %p> %m%n
+
+# Rotate log files (requires Log::Dispatch::FileRotate)
+# log4perl.appender.Logfile = Log::Dispatch::FileRotate
+# log4perl.appender.Logfile.filename = /var/log/s3napback.log
+# log4perl.appender.Logfile.mode = append
+# log4perl.appender.Logfile.max = 2
+# log4perl.appender.Logfile.size = 10_000_000
+# log4perl.appender.Logfile.layout = Log::Log4perl::Layout::PatternLayout
+# log4perl.appender.Logfile.layout.ConversionPattern = %d %p: %M> %m%n
+
+# Email logs (requires Log::Dispatch::Email)
+# log4perl.appender.Email=Log::Dispatch::Email::MailSendmail
+# log4perl.appender.Email.to=me@company.com
+# log4perl.appender.Email.from=me@company.com
+# log4perl.appender.Email.min_level=info
+# log4perl.appender.Email.layout=Log::Log4perl::Layout::PatternLayout
+# log4perl.appender.Logfile.layout.ConversionPattern = %d %p: %M> %m%n
+
+log4perl.logger.main = INFO
+#log4perl.logger.customers.get = DEBUG
