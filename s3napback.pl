@@ -60,139 +60,142 @@ $mon  += 1;
 my $datestring = time2str( "%Y-%m-%d", time );
 my $curPath = dirname( rel2abs($0) ) . "/";
 
+sub main() {
 
 ###### Setup logging
 
-my $conf_file = 's3napback.logconfig';
-Log::Log4perl->init( $conf_file );
-my $logger = Log::Log4perl::get_logger();
-
+    my $conf_file = 's3napback.logconfig';
+    Log::Log4perl->init($conf_file);
+    my $logger = Log::Log4perl::get_logger();
 
 ###### Print the header
 
-$logger->info("Starting s3napback");
-
+    $logger->info("Starting s3napback");
 
 ###### Process command-line Arguments + Options
 
-my %opt;
-getopts( 'c:td', \%opt ) || die usage();
+    my %opt;
+    getopts( 'c:td', \%opt ) || die usage();
 
-#if($opt{h}) {
-#	usage();
-#	exit 2;
-#}
+    #if($opt{h}) {
+    #	usage();
+    #	exit 2;
+    #}
 
-#my $debug = 0;
+    #my $debug = 0;
 
-if ( $opt{t} ) {
-    $logger->warn("TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN");
-}
+    if ( $opt{t} ) {
+        $logger->warn("TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN");
+    }
 
 ###### Find config files
 
-my @configs;
+    my @configs;
 
-# Hmm, does Getopt::Std modify @ARGV to contain only what it didn't parse, or are we here looking at the whole thing?
-# (doesn't really matter in practice)
+    # Hmm, does Getopt::Std modify @ARGV to contain only what it didn't parse, or are we here looking at the whole thing?
+    # (doesn't really matter in practice)
 
-for (@ARGV) {
-    if ( -f "/etc/s3napback/$_.conf" ) {
-        push @configs, "/etc/s3napback/$_.conf";
+    for (@ARGV) {
+        if ( -f "/etc/s3napback/$_.conf" ) {
+            push @configs, "/etc/s3napback/$_.conf";
+        }
+        elsif ( -f "/etc/s3napback/$_" ) {
+            push @configs, "/etc/s3napback/$_";
+        }
     }
-    elsif ( -f "/etc/s3napback/$_" ) {
-        push @configs, "/etc/s3napback/$_";
-    }
-}
 
-unshift @configs, $opt{c} if $opt{c};
-@configs = '' unless @configs;
+    unshift @configs, $opt{c} if $opt{c};
+    @configs = '' unless @configs;
 
 ###### Parse config files
 
-for my $configfile (@configs) {
-    my $mainConfig = Config::ApacheFormat->new(
-        duplicate_directives => 'combine',
-        inheritance_support  => 0
-    );
+    for my $configfile (@configs) {
+        my $mainConfig = Config::ApacheFormat->new(
+            duplicate_directives => 'combine',
+            inheritance_support  => 0
+        );
 
-    $mainConfig->read($configfile);
+        $mainConfig->read($configfile);
 
-    #print "config=" . $mainConfig->dump() . "\n";
+        #print "config=" . $mainConfig->dump() . "\n";
 
-    $diffdir = $mainConfig->get("DiffDir");
-    $diffdir || die "DiffDir must be defined.";
+        $diffdir = $mainConfig->get("DiffDir");
+        $diffdir || die "DiffDir must be defined.";
 
-    # insure that $diffdir ends with a slash
-    if ( !( $diffdir =~ /\/$/ ) ) {
-        $diffdir = $diffdir . "/";
-    }
+        # insure that $diffdir ends with a slash
+        if ( !( $diffdir =~ /\/$/ ) ) {
+            $diffdir = $diffdir . "/";
+        }
 
-    $bucket = $mainConfig->get("Bucket");
-    $bucket || die "Bucket must be defined.";
+        $bucket = $mainConfig->get("Bucket");
+        $bucket || die "Bucket must be defined.";
 
-    my $keyring = $mainConfig->get("GpgKeyring");
-    if ($keyring) {
-        $keyring = "--keyring $keyring";
-    }
+        my $keyring = $mainConfig->get("GpgKeyring");
+        if ($keyring) {
+            $keyring = "--keyring $keyring";
+        }
 
-    my $recipient = $mainConfig->get("GpgRecipient");
+        my $recipient = $mainConfig->get("GpgRecipient");
 
-    # $recipient || die "GpgRecipient must be defined.";
-    # Empty recipient OK; in that case we just won't use GPG.
+        # $recipient || die "GpgRecipient must be defined.";
+        # Empty recipient OK; in that case we just won't use GPG.
 
-    my $s3keyfile = $mainConfig->get("S3Keyfile");
-    $s3keyfile || die "S3Keyfile must be defined.";
+        my $s3keyfile = $mainConfig->get("S3Keyfile");
+        $s3keyfile || die "S3Keyfile must be defined.";
 
-    my $chunksize = $mainConfig->get("ChunkSize");
-    $chunksize || die "ChunkSize must be defined.";
+        my $chunksize = $mainConfig->get("ChunkSize");
+        $chunksize || die "ChunkSize must be defined.";
 
-    #my $notifyemail = $mainConfig->get("NotifyEmail");
-    #my $logfile = $mainConfig->get("LogFile");
-    #my $loglevel = $mainConfig->get("LogLevel");
+        #my $notifyemail = $mainConfig->get("NotifyEmail");
+        #my $logfile = $mainConfig->get("LogFile");
+        #my $loglevel = $mainConfig->get("LogLevel");
 
-    ###### Check gpg key availability
+        ###### Check gpg key availability
 
-    my $checkgpg = `gpg --batch $keyring --list-public-keys`;
-    if ( defined $recipient && !( $checkgpg =~ /$recipient/ ) ) {
-		$logger->logdie("GPG recipient $recipient not found in $checkgpg");
-        #die "Requested GPG public key not found: $recipient";
-    }
+        my $checkgpg = `gpg --batch $keyring --list-public-keys`;
+        if ( defined $recipient && !( $checkgpg =~ /$recipient/ ) ) {
+            $logger->logdie("GPG recipient $recipient not found in $checkgpg");
 
-    ###### Setup commands (this is the crux of the matter)
+            #die "Requested GPG public key not found: $recipient";
+        }
 
-    if ( defined $recipient ) {
-        $encrypt = "| gpg --batch $keyring -r $recipient -e";
-    }
+        ###### Setup commands (this is the crux of the matter)
 
-    $send_to_s3     = "| java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
-    $delete_from_s3 = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b";
+        if ( defined $recipient ) {
+            $encrypt = "| gpg --batch $keyring -r $recipient -e";
+        }
 
-    ###### Check what has already been done
+        $send_to_s3     = "| java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
+        $delete_from_s3 = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b";
 
-    my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
+        ###### Check what has already been done
 
-    $logger->info("Getting current contents of bucket $bucket modified on $datestring...\n");
-    my @bucketlist = `$list_s3_bucket`;
+        my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 
-	$logger->debug(join "\n", @bucketlist);
+        $logger->info("Getting current contents of bucket $bucket modified on $datestring...\n");
+        my @bucketlist = `$list_s3_bucket`;
 
-    my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
+        $logger->debug( join "\n", @bucketlist );
 
-    # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
-    @alreadyDoneToday = map { s/^.* - (.*?) - .*$/\1/; chomp; $_ } @alreadyDoneToday;
+        my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
 
-    $logger->info("Buckets already done today: \n");
-    #map { print; print "\n"; } @alreadyDoneToday;
-    for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
+        # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
+        @alreadyDoneToday = map { s/^.* - (.*?) - .*$/$1/; chomp; $_ } @alreadyDoneToday;
 
-    ###### Perform the requested operations
+        $logger->info("Buckets already done today: \n");
 
-    processBlock($mainConfig);
+        #map { print; print "\n"; } @alreadyDoneToday;
+        for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
 
-    for my $cycle ( $mainConfig->get("Cycle") ) {
-        my $block = $mainConfig->block($cycle);
-        processBlock($block);
+        ###### Perform the requested operations
+
+        processBlock($mainConfig);
+
+        for my $cycle ( $mainConfig->get("Cycle") ) {
+            my $block = $mainConfig->block($cycle);
+            processBlock($block);
+        }
+
     }
 
 }
@@ -443,13 +446,13 @@ sub backupSubversion {
     # get informed of the current last revision (head)
     my $headRevision = `svnlook youngest $name`;
     chomp $headRevision;
-	
-	$logger->debug("Last revision of $name: $headRevision");
+
+    $logger->debug("Last revision of $name: $headRevision");
 
     if ( $type == "DIFF" && $lastSavedRevision == $headRevision ) {
 
         # of course, if the head is not younger than the last saved revision it's useless to go on backing up.
-		$logger->info("$name has no new revisions since last backup; skipping");
+        $logger->info("$name has no new revisions since last backup; skipping");
         return;
     }
 
@@ -510,3 +513,4 @@ sub sendToS3 {
     }
 }
 
+main();
