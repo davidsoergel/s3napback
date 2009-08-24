@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
