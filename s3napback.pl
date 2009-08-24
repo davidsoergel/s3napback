@@ -212,18 +212,14 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1]);
+            $logger->info( $name->[0] . " => " . $name->[1] );
             $block = $config->block($name);
             $name  = $name->[1];
         }
 
-        my $frequency = $block->get("Frequency");
-        my $phase     = $block->get("Phase");
-        my $diffs     = $block->get("Diffs");
-        my $fulls     = $block->get("Fulls");
-        my @excludes  = $block->get("Exclude");
+        my @excludes = $block->get("Exclude");
 
-        backupDirectory( $name, $frequency, $phase, $diffs, $fulls, @excludes );
+        backupDirectory( $name, cyclespec($block), @excludes );
     }
 
     for my $name ( $config->get("Subversion") ) {
@@ -232,17 +228,12 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1]  );
+            $logger->info( $name->[0] . " => " . $name->[1] );
             $block = $config->block($name);
             $name  = $name->[1];
         }
 
-        my $frequency = $block->get("Frequency");
-        my $phase     = $block->get("Phase");
-        my $diffs     = $block->get("Diffs");
-        my $fulls     = $block->get("Fulls");
-
-        backupSubversion( $name, $frequency, $phase, $diffs, $fulls );
+        backupSubversion( $name, cyclespec($block) );
     }
 
     for my $name ( $config->get("SubversionDir") ) {
@@ -253,12 +244,7 @@ sub processBlock() {
             $name  = $name->[1];
         }
 
-        my $frequency = $block->get("Frequency");
-        my $phase     = $block->get("Phase");
-        my $diffs     = $block->get("Diffs");
-        my $fulls     = $block->get("Fulls");
-
-        backupSubversionDir( $name, $frequency, $phase, $diffs, $fulls );
+        backupSubversionDir( $name, $cyclespec ($block) );
     }
 
     for my $name ( $config->get("MySQL") ) {
@@ -269,19 +255,16 @@ sub processBlock() {
             $name  = $name->[1];
         }
 
-        my $frequency = $block->get("Frequency");
-        my $phase     = $block->get("Phase");
-        my $fulls     = $block->get("Fulls");
-
-        backupMysql( $name, $frequency, $phase, $fulls );
+        backupMysql( $name, cyclespec($block) );
     }
 
 }
 
 sub backupDirectory {
-    my ( $name, $frequency, $phase, $diffs, $fulls, @excludes ) = @_;
+    my ( $name, @cyclespec, @excludes ) = @_;
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec
 
-    if ( ( $yday + $phase ) % $frequency != 0 ) {
+        if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
         return;
     }
@@ -324,9 +307,13 @@ sub backupDirectory {
 }
 
 sub backupMysql {
-    my ( $name, $frequency, $phase, $fulls ) = @_;
+    my ( $name, @cyclespec ) = @_;
 
-    if ( ( $yday + $phase ) % $frequency != 0 ) {
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec
+
+        # note $diffs is ignored
+
+        if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
         return;
     }
@@ -375,7 +362,8 @@ sub backupMysql {
 #	}
 
 sub backupSubversionDir {
-    my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
+    my ( $name, @cyclespec ) = @_;
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
 
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
     if ( ( $yday + $phase ) % $frequency != 0 ) {
@@ -402,7 +390,9 @@ sub backupSubversionDir {
 # Adapted to s3napback by Kevin Ross - metova.com
 #
 sub backupSubversion {
-    my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
+    my ( $name, @cyclespec ) = @_;
+
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -514,6 +504,22 @@ sub sendToS3 {
             }
         }
     }
+}
+
+sub cyclespec {
+    my ($block) = @_;
+
+    my $frequency = $block->get("Frequency");
+    my $phase     = $block->get("Phase");
+    my $diffs     = $block->get("Diffs");
+    my $fulls     = $block->get("Fulls");
+
+    if ( !defined $frequency ) { $frequency = 1; }
+    if ( !defined $phase )     { $phase     = 0; }
+    if ( !defined $diffs )     { $diffs     = 6; }
+    if ( !defined $fulls )     { $fulls     = 4; }
+
+    return ( $frequency, $phase, $diffs, $fulls );
 }
 
 main();
