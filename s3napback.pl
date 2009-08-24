@@ -3,7 +3,7 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Version 1.03
+# Version 1.04
 #
 # Copyright (c) 2008-2009 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
@@ -40,6 +40,8 @@ use Date::Format;
 use File::stat;
 use Getopt::Std;
 use Config::ApacheFormat;
+use File::Spec::Functions qw(rel2abs);
+use File::Basename;
 
 my $diffdir;
 my $bucket;
@@ -54,6 +56,7 @@ my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) = localtime(t
 $year += 1900;
 $mon  += 1;
 my $datestring = time2str( "%Y-%m-%d", time );
+my $curPath = dirname( rel2abs($0) ) . "/";
 
 ###### Print the header
 
@@ -73,10 +76,9 @@ getopts( 'c:td', \%opt ) || die usage();
 
 #my $debug = 0;
 
-if ( $opt{t} )
-    {
+if ( $opt{t} ) {
     print "TEST MODE ONLY, NO REAL ACTIONS WILL BE TAKEN\n\n";
-    }
+}
 
 ###### Find config files
 
@@ -85,25 +87,21 @@ my @configs;
 # Hmm, does Getopt::Std modify @ARGV to contain only what it didn't parse, or are we here looking at the whole thing?
 # (doesn't really matter in practice)
 
-for (@ARGV)
-    {
-    if ( -f "/etc/s3napback/$_.conf" )
-        {
+for (@ARGV) {
+    if ( -f "/etc/s3napback/$_.conf" ) {
         push @configs, "/etc/s3napback/$_.conf";
-        }
-    elsif ( -f "/etc/s3napback/$_" )
-        {
-        push @configs, "/etc/s3napback/$_";
-        }
     }
+    elsif ( -f "/etc/s3napback/$_" ) {
+        push @configs, "/etc/s3napback/$_";
+    }
+}
 
 unshift @configs, $opt{c} if $opt{c};
 @configs = '' unless @configs;
 
 ###### Parse config files
 
-for my $configfile (@configs)
-    {
+for my $configfile (@configs) {
     my $mainConfig = Config::ApacheFormat->new(
         duplicate_directives => 'combine',
         inheritance_support  => 0
@@ -117,19 +115,17 @@ for my $configfile (@configs)
     $diffdir || die "DiffDir must be defined.";
 
     # insure that $diffdir ends with a slash
-    if ( !( $diffdir =~ /\/$/ ) )
-        {
+    if ( !( $diffdir =~ /\/$/ ) ) {
         $diffdir = $diffdir . "/";
-        }
+    }
 
     $bucket = $mainConfig->get("Bucket");
     $bucket || die "Bucket must be defined.";
 
     my $keyring = $mainConfig->get("GpgKeyring");
-    if ($keyring)
-        {
+    if ($keyring) {
         $keyring = "--keyring $keyring";
-        }
+    }
 
     my $recipient = $mainConfig->get("GpgRecipient");
 
@@ -149,24 +145,22 @@ for my $configfile (@configs)
     ###### Check gpg key availability
 
     my $checkgpg = `gpg --batch $keyring --list-public-keys`;
-    if ( defined $recipient && !( $checkgpg =~ /$recipient/ ) )
-        {
+    if ( defined $recipient && !( $checkgpg =~ /$recipient/ ) ) {
         die "Requested GPG public key not found: $recipient";
-        }
+    }
 
     ###### Setup commands (this is the crux of the matter)
 
-    if ( defined $recipient )
-        {
+    if ( defined $recipient ) {
         $encrypt = "| gpg --batch $keyring -r $recipient -e";
-        }
+    }
 
-    $send_to_s3     = "| java -jar js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
-    $delete_from_s3 = "java -jar js3tream.jar -v -K $s3keyfile -d -b";
+    $send_to_s3     = "| java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
+    $delete_from_s3 = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b";
 
     ###### Check what has already been done
 
-    my $list_s3_bucket = "java -jar js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
+    my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 
     print("Getting current contents of bucket $bucket modified on $datestring...\n");
     my @bucketlist = `$list_s3_bucket`;
@@ -184,30 +178,26 @@ for my $configfile (@configs)
 
     processBlock($mainConfig);
 
-    for my $cycle ( $mainConfig->get("Cycle") )
-        {
+    for my $cycle ( $mainConfig->get("Cycle") ) {
         my $block = $mainConfig->block($cycle);
         processBlock($block);
-        }
-
     }
 
-sub processBlock()
-    {
+}
+
+sub processBlock() {
     my ($config) = @_;
 
-    for my $name ( $config->get("Directory") )
-        {
+    for my $name ( $config->get("Directory") ) {
 
         #print "Directory $name\n";
 
         my $block = $config;
-        if ( ref($name) eq 'ARRAY' )
-            {
+        if ( ref($name) eq 'ARRAY' ) {
             print( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
-            }
+        }
 
         my $frequency = $block->get("Frequency");
         my $phase     = $block->get("Phase");
@@ -216,20 +206,18 @@ sub processBlock()
         my @excludes  = $block->get("Exclude");
 
         backupDirectory( $name, $frequency, $phase, $diffs, $fulls, @excludes );
-        }
+    }
 
-    for my $name ( $config->get("Subversion") )
-        {
+    for my $name ( $config->get("Subversion") ) {
 
         #print "Subversion $name\n";
 
         my $block = $config;
-        if ( ref($name) eq 'ARRAY' )
-            {
+        if ( ref($name) eq 'ARRAY' ) {
             print( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
-            }
+        }
 
         my $frequency = $block->get("Frequency");
         my $phase     = $block->get("Phase");
@@ -237,17 +225,15 @@ sub processBlock()
         my $fulls     = $block->get("Fulls");
 
         backupSubversion( $name, $frequency, $phase, $diffs, $fulls );
-        }
+    }
 
-    for my $name ( $config->get("SubversionDir") )
-        {
+    for my $name ( $config->get("SubversionDir") ) {
         my $block = $config;
-        if ( ref($name) eq 'ARRAY' )
-            {
+        if ( ref($name) eq 'ARRAY' ) {
             print( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
-            }
+        }
 
         my $frequency = $block->get("Frequency");
         my $phase     = $block->get("Phase");
@@ -255,111 +241,99 @@ sub processBlock()
         my $fulls     = $block->get("Fulls");
 
         backupSubversionDir( $name, $frequency, $phase, $diffs, $fulls );
-        }
+    }
 
-    for my $name ( $config->get("MySQL") )
-        {
+    for my $name ( $config->get("MySQL") ) {
         my $block = $config;
-        if ( ref($name) eq 'ARRAY' )
-            {
+        if ( ref($name) eq 'ARRAY' ) {
             print( $name->[0] . " => " . $name->[1] . "\n" );
             $block = $config->block($name);
             $name  = $name->[1];
-            }
+        }
 
         my $frequency = $block->get("Frequency");
         my $phase     = $block->get("Phase");
         my $fulls     = $block->get("Fulls");
 
         backupMysql( $name, $frequency, $phase, $fulls );
-        }
-
     }
 
-sub backupDirectory
-    {
+}
+
+sub backupDirectory {
     my ( $name, $frequency, $phase, $diffs, $fulls, @excludes ) = @_;
 
-    if ( ( $yday + $phase ) % $frequency != 0 )
-        {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         print "Skipping $name\n";
         return;
-        }
+    }
 
     my $difffile = $name . ".diff";
     $difffile =~ s/\//_/g;
     $difffile = $diffdir . $difffile;
 
     my $sb = stat($difffile);
-    if ( defined $sb )
-        {
+    if ( defined $sb ) {
         my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $diffyday, $isdst ) = localtime( $sb->mtime );
 
-        if ( $diffyday == ( $yday + $phase ) )
-            {
+        if ( $diffyday == ( $yday + $phase ) ) {
             print "Skipping $name; diff was already performed today\n";
             return;
-            }
         }
+    }
 
     my $cycles = $fulls * ( $diffs + 1 );
     my $cyclenum = ( ( $yday + $phase ) / $frequency ) % $cycles;
 
     my $type = "DIFF";
 
-    if ( $cyclenum % ( $diffs + 1 ) == 0 )
-        {
+    if ( $cyclenum % ( $diffs + 1 ) == 0 ) {
         $type = "FULL";
         unlink $difffile;
-        }
+    }
 
     my $excludes = "";
 
-    for my $exclude (@excludes)
-        {
+    for my $exclude (@excludes) {
         $excludes .= " --exclude $exclude";
-        }
+    }
 
     my $datasource     = "tar $excludes -g $difffile -C / -czp $name";
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     print "Directory $name -> $bucketfullpath\n";
     sendToS3( $datasource, $bucketfullpath );
-    }
+}
 
-sub backupMysql
-    {
+sub backupMysql {
     my ( $name, $frequency, $phase, $fulls ) = @_;
 
-    if ( ( $yday + $phase ) % $frequency != 0 )
-        {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         print "Skipping $name\n";
         return;
-        }
+    }
 
     my $cycles = $fulls;
     my $cyclenum = ( ( $yday + $phase ) / $frequency ) % $cycles;
 
     my $socket    = "";
     my $socketopt = "";
-    if ( $name =~ /(.*):(.*)/ )
-        {
+    if ( $name =~ /(.*):(.*)/ ) {
         $socket    = $1;
         $socketopt = "--socket $1";
         $name      = $2;
-        }
+    }
     if ( $name eq "all" ) { $name = "--all-databases"; }
     my $datasource = "mysqldump --opt $socketopt $name | gzip";
 
-    if ($socket)
-        {
+    if ($socket) {
         $name = "$socket/$name";
-        }
+    }
 
     my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
     print "MySQL $name -> $bucketfullpath\n";
     sendToS3( $datasource, $bucketfullpath );
-    }
+}
 
 # old version made only full backups, no diffs
 # sub backupSubversion
@@ -382,16 +356,14 @@ sub backupMysql
 #	sendToS3($datasource, $bucketfullpath);
 #	}
 
-sub backupSubversionDir
-    {
+sub backupSubversionDir {
     my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
 
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
-    if ( ( $yday + $phase ) % $frequency != 0 )
-        {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         print "Skipping $name\n";
         return;
-        }
+    }
 
     # inspired by https://popov-cs.grid.cf.ac.uk/subversion/WeSC/scripts/svn_backup
 
@@ -399,29 +371,25 @@ sub backupSubversionDir
     my @subdirs = readdir(DIR);
     closedir(DIR);
 
-    foreach my $subdir (@subdirs)
-        {
+    foreach my $subdir (@subdirs) {
         `svnadmin verify $name/$subdir >& /dev/null`;
-        if ( $? == 0 )
-            {
+        if ( $? == 0 ) {
             backupSubversion( "$name/$subdir", $frequency, $phase, $diffs, $fulls );
-            }
         }
     }
+}
 
 #
 # Inspired by from http://le-gall.net/pierrick/blog/index.php/2007/04/17/98-subversion-incremental-backup
 # Adapted to s3napback by Kevin Ross - metova.com
 #
-sub backupSubversion
-    {
+sub backupSubversion {
     my ( $name, $frequency, $phase, $diffs, $fulls ) = @_;
 
-    if ( ( $yday + $phase ) % $frequency != 0 )
-        {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         print "Skipping $name\n";
         return;
-        }
+    }
 
     my $difffile = $name . ".diff";
     $difffile =~ s/\//_/g;
@@ -432,46 +400,43 @@ sub backupSubversion
 
     # check the time on any existing diff file to see if this was already done today.
     my $sb = stat($difffile);
-    if ( defined $sb )
-        {
+    if ( defined $sb ) {
         my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $diffyday, $isdst ) = localtime( $sb->mtime );
 
-        if ( $diffyday == ( $yday + $phase ) )
-            {
+        if ( $diffyday == ( $yday + $phase ) ) {
             print "Skipping $name was already backed up today\n";
             return;
-            }
+        }
 
         # The diff file exists and we need to run, so read the last saved revision from the file
         open( LAST_SAVED_REVISION, '<', $difffile );
         $lastSavedRevision = <LAST_SAVED_REVISION>;
         chomp $lastSavedRevision;
         close(LAST_SAVED_REVISION);
-        }
+    }
 
     my $cycles = $fulls * ( $diffs + 1 );
     my $cyclenum = ( ( $yday + $phase ) / $frequency ) % $cycles;
 
     my $type = "DIFF";
 
-    if ( $cyclenum % ( $diffs + 1 ) == 0 || $lastSavedRevision < 0 )
-        {
+    if ( $cyclenum % ( $diffs + 1 ) == 0 || $lastSavedRevision < 0 ) {
         $type = "FULL";
 
         # remove the diff file, we want to do a full backup.
         unlink $difffile;
-		$lastSavedRevision = -1;
-        }
+        $lastSavedRevision = -1;
+    }
 
     # get informed of the current last revision (head)
     my $headRevision = `svnlook youngest $name`;
     chomp $headRevision;
 
-    if ( $type == "DIFF" && $lastSavedRevision == $headRevision )
-        {
+    if ( $type == "DIFF" && $lastSavedRevision == $headRevision ) {
+
         # of course, if the head is not younger than the last saved revision it's useless to go on backing up.
         return;
-        }
+    }
 
     # if the last saved is 1000 and the head is 1023, we want the backup from 1001 to 1023
     my $fromRevision = $lastSavedRevision + 1;
@@ -484,57 +449,49 @@ sub backupSubversion
     sendToS3( $datasource, $bucketfullpath );
 
     # Save last revision to the diff file so we know where to pick up later.
-    if ( !$opt{t} )
-        {
+    if ( !$opt{t} ) {
         open( LAST_SAVED_REVISION, '>', $difffile );
         print LAST_SAVED_REVISION $toRevision, "\n";
         close(LAST_SAVED_REVISION);
-        }
     }
+}
 
-sub sendToS3
-    {
+sub sendToS3 {
     my ( $datasource, $bucketfullpath ) = @_;
 
-    if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} )
-        {
+    if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
         print "Skipping $bucketfullpath; already done today\n";
         return;
-        }
+    }
 
-    if ( $opt{t} || $opt{d} )
-        {
+    if ( $opt{t} || $opt{d} ) {
         print "$delete_from_s3 $bucketfullpath\n";
         print "$datasource $encrypt $send_to_s3 $bucketfullpath\n\n";
-        }
+    }
 
-    if ( !$opt{t} )
-        {
+    if ( !$opt{t} ) {
 
         # delete the bucket if it exists
         `$delete_from_s3 $bucketfullpath`;
 
-        if ( $? != 0 )
-            {
+        if ( $? != 0 ) {
             print("Could not delete old backup: $!\n");
-            }
+        }
 
         # stream the data
         `$datasource $encrypt $send_to_s3 $bucketfullpath`;
 
-        if ( $? != 0 )
-            {
+        if ( $? != 0 ) {
             print("Backup to $bucketfullpath failed: $!\n");
             print("Deleting any partial backup\n");
 
             # delete the bucket if it exists
             `$delete_from_s3 $bucketfullpath`;
 
-            if ( $? != 0 )
-                {
+            if ( $? != 0 ) {
                 print("Could not delete partial backup: $!\n");
-                }
             }
         }
     }
+}
 
