@@ -244,7 +244,7 @@ sub processBlock() {
             $name  = $name->[1];
         }
 
-        backupSubversionDir( $name, $cyclespec ($block) );
+        backupSubversionDir( $name, cyclespec ($block) );
     }
 
     for my $name ( $config->get("MySQL") ) {
@@ -262,7 +262,7 @@ sub processBlock() {
 
 sub backupDirectory {
     my ( $name, @cyclespec, @excludes ) = @_;
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
 
         if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -309,7 +309,7 @@ sub backupDirectory {
 sub backupMysql {
     my ( $name, @cyclespec ) = @_;
 
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec
+    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
 
         # note $diffs is ignored
 
