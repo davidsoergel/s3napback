@@ -53,6 +53,7 @@ my $delete_from_s3;
 my $send_to_s3;
 
 my %isAlreadyDoneToday = {};
+    my %opt;
 
 my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) = localtime(time);
 $year += 1900;
@@ -60,13 +61,17 @@ $mon  += 1;
 my $datestring = time2str( "%Y-%m-%d", time );
 my $curPath = dirname( rel2abs($0) ) . "/";
 
-sub main() {
 
 ###### Setup logging
 
-    my $conf_file = 's3napback.logconfig';
-    Log::Log4perl->init($conf_file);
-    my $logger = Log::Log4perl::get_logger();
+my $conf_file = 's3napback.logconfig';
+Log::Log4perl->init($conf_file);
+my $logger = Log::Log4perl::get_logger();
+
+
+
+sub main() {
+
 
 ###### Print the header
 
@@ -74,7 +79,6 @@ sub main() {
 
 ###### Process command-line Arguments + Options
 
-    my %opt;
     getopts( 'c:td', \%opt ) || die usage();
 
     #if($opt{h}) {
