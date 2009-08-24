@@ -52,8 +52,8 @@ my $encrypt;
 my $delete_from_s3;
 my $send_to_s3;
 
-my %isAlreadyDoneToday = {};
-    my %opt;
+my %isAlreadyDoneToday = ();
+my %opt;
 
 my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) = localtime(time);
 $year += 1900;
@@ -61,17 +61,13 @@ $mon  += 1;
 my $datestring = time2str( "%Y-%m-%d", time );
 my $curPath = dirname( rel2abs($0) ) . "/";
 
-
 ###### Setup logging
 
 my $conf_file = 's3napback.logconfig';
 Log::Log4perl->init($conf_file);
 my $logger = Log::Log4perl::get_logger();
 
-
-
 sub main() {
-
 
 ###### Print the header
 
@@ -138,6 +134,9 @@ sub main() {
         if ($keyring) {
             $keyring = "--keyring $keyring";
         }
+        else {
+            $keyring = "";
+        }
 
         my $recipient = $mainConfig->get("GpgRecipient");
 
@@ -176,7 +175,7 @@ sub main() {
 
         my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 
-        $logger->info("Getting current contents of bucket $bucket modified on $datestring...\n");
+        $logger->info("Getting current contents of bucket $bucket modified on $datestring...");
         my @bucketlist = `$list_s3_bucket`;
 
         $logger->debug( join "\n", @bucketlist );
@@ -186,7 +185,7 @@ sub main() {
         # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
         @alreadyDoneToday = map { s/^.* - (.*?) - .*$/$1/; chomp; $_ } @alreadyDoneToday;
 
-        $logger->info("Buckets already done today: \n");
+        $logger->info("Buckets already done today:");
 
         #map { print; print "\n"; } @alreadyDoneToday;
         for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
@@ -213,7 +212,7 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1]);
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -233,7 +232,7 @@ sub processBlock() {
 
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1]  );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -249,7 +248,7 @@ sub processBlock() {
     for my $name ( $config->get("SubversionDir") ) {
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -265,7 +264,7 @@ sub processBlock() {
     for my $name ( $config->get("MySQL") ) {
         my $block = $config;
         if ( ref($name) eq 'ARRAY' ) {
-            $logger->info( $name->[0] . " => " . $name->[1] . "\n" );
+            $logger->info( $name->[0] . " => " . $name->[1] );
             $block = $config->block($name);
             $name  = $name->[1];
         }
@@ -453,7 +452,7 @@ sub backupSubversion {
 
     $logger->debug("Last revision of $name: $headRevision");
 
-    if ( $type == "DIFF" && $lastSavedRevision == $headRevision ) {
+    if ( $type eq "DIFF" && $lastSavedRevision == $headRevision ) {
 
         # of course, if the head is not younger than the last saved revision it's useless to go on backing up.
         $logger->info("$name has no new revisions since last backup; skipping");
@@ -497,21 +496,21 @@ sub sendToS3 {
         $logger->debug(`$delete_from_s3 $bucketfullpath`);
 
         if ( $? != 0 ) {
-            $logger->error("Could not delete old backup: $!\n");
+            $logger->error("Could not delete old backup: $!");
         }
 
         # stream the data
         $logger->debug(`$datasource $encrypt $send_to_s3 $bucketfullpath`);
 
         if ( $? != 0 ) {
-            $logger->error("Backup to $bucketfullpath failed: $!\n");
-            $logger->error("Deleting any partial backup\n");
+            $logger->error("Backup to $bucketfullpath failed: $!");
+            $logger->error("Deleting any partial backup");
 
             # delete the bucket if it exists
             $logger->debug(`$delete_from_s3 $bucketfullpath`);
 
             if ( $? != 0 ) {
-                $logger->error("Could not delete partial backup: $!\n");
+                $logger->error("Could not delete partial backup: $!");
             }
         }
     }
