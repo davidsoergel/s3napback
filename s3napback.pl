@@ -75,7 +75,7 @@ sub main() {
 
 ###### Process command-line Arguments + Options
 
-    getopts( 'c:td', \%opt ) || die usage();
+    getopts( 'c:t', \%opt ) || die usage();
 
     #if($opt{h}) {
     #	usage();
@@ -127,6 +127,16 @@ sub main() {
             $diffdir = $diffdir . "/";
         }
 
+        $tempdir = $mainConfig->get("TempDir");
+        if ( defined $tempdir ) {
+            #  $tempdir || die "TempDir must be defined.";
+
+            # insure that $tempdir ends with a slash
+            if ( !( $tempdir =~ /\/$/ ) ) {
+                $tempdir = $tempdir . "/";
+            }
+        }
+
         $bucket = $mainConfig->get("Bucket");
         $bucket || die "Bucket must be defined.";
 
@@ -168,7 +178,7 @@ sub main() {
             $encrypt = "| gpg --batch $keyring -r $recipient -e";
         }
 
-        $send_to_s3     = "| java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
+        $send_to_s3     = "java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
         $delete_from_s3 = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b";
 
         ###### Check what has already been done
@@ -244,7 +254,7 @@ sub processBlock() {
             $name  = $name->[1];
         }
 
-        backupSubversionDir( $name, cyclespec ($block) );
+        backupSubversionDir( $name, cyclespec($block) );
     }
 
     for my $name ( $config->get("MySQL") ) {
@@ -262,9 +272,9 @@ sub processBlock() {
 
 sub backupDirectory {
     my ( $name, @cyclespec, @excludes ) = @_;
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
+    my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-        if ( ( $yday + $phase ) % $frequency != 0 ) {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
         return;
     }
@@ -303,17 +313,17 @@ sub backupDirectory {
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Directory $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath );
+    sendToS3( $datasource, $bucketfullpath, $usetemp );
 }
 
 sub backupMysql {
     my ( $name, @cyclespec ) = @_;
 
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
+    my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-        # note $diffs is ignored
+    # note $diffs is ignored
 
-        if ( ( $yday + $phase ) % $frequency != 0 ) {
+    if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
         return;
     }
@@ -337,7 +347,7 @@ sub backupMysql {
 
     my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
     $logger->info("MySQL $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath );
+    sendToS3( $datasource, $bucketfullpath, $usetemp );
 }
 
 # old version made only full backups, no diffs
@@ -363,7 +373,7 @@ sub backupMysql {
 
 sub backupSubversionDir {
     my ( $name, @cyclespec ) = @_;
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
+    my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
     if ( ( $yday + $phase ) % $frequency != 0 ) {
@@ -380,7 +390,7 @@ sub backupSubversionDir {
     foreach my $subdir (@subdirs) {
         $logger->debug(`svnadmin verify $name/$subdir 2>&1 1>/dev/null`);
         if ( $? == 0 ) {
-            backupSubversion( "$name/$subdir", $frequency, $phase, $diffs, $fulls );
+            backupSubversion( "$name/$subdir", @cyclespec );
         }
     }
 }
@@ -392,7 +402,7 @@ sub backupSubversionDir {
 sub backupSubversion {
     my ( $name, @cyclespec ) = @_;
 
-    my ( $frequency, $phase, $diffs, $fulls ) = @cyclespec;
+    my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -457,7 +467,7 @@ sub backupSubversion {
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Subversion $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath );
+    sendToS3( $datasource, $bucketfullpath, $usetemp );
 
     # Save last revision to the diff file so we know where to pick up later.
     if ( !$opt{t} ) {
@@ -468,42 +478,95 @@ sub backupSubversion {
 }
 
 sub sendToS3 {
-    my ( $datasource, $bucketfullpath ) = @_;
+    my ( $datasource, $bucketfullpath, $shouldUseTempFile ) = @_;
 
     if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
         $logger->warn("Skipping $bucketfullpath -- already done today");
         return;
     }
 
-    if ( $opt{t} || $opt{d} ) {
-        $logger->debug("$delete_from_s3 $bucketfullpath");
-        $logger->debug("$datasource $encrypt $send_to_s3 $bucketfullpath");
+    # setup in case this is a temp file scenario
+    my $tempfile = $bucketfullpath . ".temp";
+    $tempfile =~ s/\//_/g;
+    $tempfile = $tempdir . $tempfile;
+
+    if ( $opt{t} ) {
+
+        $logger->info("$delete_from_s3 $bucketfullpath");
+
+        # print out the statements for test mode.
+        if ( $shouldUseTempFile == 1 ) {
+
+            # stream the data to a temp file first, then to jS3tream
+            $logger->info("Using temp file to buffer before streaming[ $tempfile ]...");
+            $logger->info("$datasource $encrypt > $tempfile");
+            $logger->info("$send_to_s3 $bucketfullpath <  $tempfile");
+            $logger->info("rm $tempfile");
+        }
+        else {
+
+            # stream the data
+            $logger->info("$datasource $encrypt | $send_to_s3 $bucketfullpath");
+        }
+
+        return;
     }
 
-    if ( !$opt{t} ) {
+    # delete the bucket if it exists
+    $logger->debug(`$delete_from_s3 $bucketfullpath`);
+
+    if ( $? != 0 ) {
+        $logger->error("Could not delete old backup: $!");
+    }
+
+    if ( $shouldUseTempFile == 1 ) {
+        $tempdir || $logger->logdie(
+            "TempDir must be defined in order to UseTempFile
+."
+        );
+
+        # stream the data to a temp file first, then to jS3tream
+        $logger->info("Using temp file to buffer before streaming [ $tempfile ]...");
+        $logger->debug(`$datasource $encrypt > $tempfile`);
+
+        if ( $? != 0 ) {
+            $logger->error("Could stream to temporary file: $!");
+        }
+        else {
+            $logger->debug(`$send_to_s3 $bucketfullpath <  $tempfile`);
+        }
+
+        deleteOnError();
+
+        # delete the remnants of the temp file if there was one.
+        $logger->info("Deleting temp file [ $tempfile ].");
+        unlink $tempfile;
+
+    }
+    else {
+
+        # stream the data
+        $logger->debug(`$datasource $encrypt | $send_to_s3 $bucketfullpath`);
+        deleteOnError();
+    }
+
+}
+
+sub deleteOnError {
+    my ($bucketfullpath) = @_;
+
+    if ( $? != 0 ) {
+        $logger->error("Backup to $bucketfullpath failed: $!");
+        $logger->error("Deleting any partial backup");
 
         # delete the bucket if it exists
         $logger->debug(`$delete_from_s3 $bucketfullpath`);
 
         if ( $? != 0 ) {
-            $logger->error("Could not delete old backup: $!");
-        }
-
-        # stream the data
-        $logger->debug(`$datasource $encrypt $send_to_s3 $bucketfullpath`);
-
-        if ( $? != 0 ) {
-            $logger->error("Backup to $bucketfullpath failed: $!");
-            $logger->error("Deleting any partial backup");
-
-            # delete the bucket if it exists
-            $logger->debug(`$delete_from_s3 $bucketfullpath`);
-
-            if ( $? != 0 ) {
-                $logger->error("Could not delete partial backup: $!");
-            }
+            $logger->error("Could not delete partial backup: $!");
         }
     }
+
 }
 
 sub cyclespec {
@@ -513,13 +576,14 @@ sub cyclespec {
     my $phase     = $block->get("Phase");
     my $diffs     = $block->get("Diffs");
     my $fulls     = $block->get("Fulls");
+    my $usetemp   = $block->get("UseTempFile");
 
     if ( !defined $frequency ) { $frequency = 1; }
     if ( !defined $phase )     { $phase     = 0; }
     if ( !defined $diffs )     { $diffs     = 6; }
     if ( !defined $fulls )     { $fulls     = 4; }
 
-    return ( $frequency, $phase, $diffs, $fulls );
+    return ( $frequency, $phase, $diffs, $fulls, $usetemp );
 }
 
 main();
