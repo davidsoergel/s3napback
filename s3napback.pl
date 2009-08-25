@@ -3,7 +3,7 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Version 1.04
+# Version 1.04rc1
 #
 # Copyright (c) 2008-2009 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
@@ -64,8 +64,7 @@ my $curPath = dirname( rel2abs($0) ) . "/";
 
 ###### Setup logging
 
-my $conf_file = 's3napback.logconfig';
-Log::Log4perl->init($conf_file);
+Log::Log4perl->init("${curPath}s3napback.logconfig);
 
 sub main() {
 
