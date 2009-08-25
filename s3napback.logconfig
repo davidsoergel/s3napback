@@ -57,9 +57,8 @@ log4perl.appender.Logfile.layout.ConversionPattern = %d %c %p %m%n
 # log4perl.appender.Email.layout.ConversionPattern = %d %c %p %m%n
 
 
-log4perl.logger.main = INFO
-log4perl.logger.main.Directory = INFO
-log4perl.logger.main.Subversion = INFO
-log4perl.logger.main.MySQL = INFO
-log4perl.logger.main.S3 = INFO
+log4perl.logger.Backup.S3napback = INFO
+log4perl.logger.Backup.S3napback.Directory = INFO
+log4perl.logger.Backup.S3napback.Subversion = INFO
+log4perl.logger.Backup.S3napback.MySQL = INFO
 

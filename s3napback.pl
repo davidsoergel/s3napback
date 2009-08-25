@@ -69,7 +69,7 @@ Log::Log4perl->init($conf_file);
 
 sub main() {
 
-    my $logger = Log::Log4perl::get_logger("main");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback");
 
 ###### Print the header
 
@@ -219,7 +219,7 @@ sub main() {
 sub processBlock() {
     my ($config) = @_;
 
-    my $logger = Log::Log4perl::get_logger("main");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback");
 
     for my $name ( $config->get("Directory") ) {
 
@@ -279,7 +279,7 @@ sub backupDirectory {
     my ( $name, @cyclespec, @excludes ) = @_;
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-    my $logger = Log::Log4perl::get_logger("main.Directory");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback::Directory");
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -328,7 +328,7 @@ sub backupMysql {
 
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-    my $logger = Log::Log4perl::get_logger("main.MySQL");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback::MySQL");
 
     # note $diffs is ignored
 
@@ -384,7 +384,7 @@ sub backupSubversionDir {
     my ( $name, @cyclespec ) = @_;
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-    my $logger = Log::Log4perl::get_logger("main.Subversion");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback::Subversion");
 
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
     if ( ( $yday + $phase ) % $frequency != 0 ) {
@@ -415,7 +415,7 @@ sub backupSubversion {
 
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
-    my $logger = Log::Log4perl::get_logger("main.Subversion");
+    my $logger = Log::Log4perl::get_logger("Backup::S3napback::Subversion");
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
