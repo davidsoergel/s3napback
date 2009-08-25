@@ -320,7 +320,7 @@ sub backupDirectory {
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Directory $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp );
+    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
 }
 
 sub backupMysql {
@@ -356,7 +356,7 @@ sub backupMysql {
 
     my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
     $logger->info("MySQL $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp );
+    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
 }
 
 # old version made only full backups, no diffs
@@ -480,7 +480,7 @@ sub backupSubversion {
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Subversion $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp );
+    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
 
     # Save last revision to the diff file so we know where to pick up later.
     if ( !$opt{t} ) {
@@ -491,9 +491,10 @@ sub backupSubversion {
 }
 
 sub sendToS3 {
-    my ( $datasource, $bucketfullpath, $shouldUseTempFile ) = @_;
 
-    my $logger = Log::Log4perl::get_logger("main.S3");
+    # by passing the logger in here we can select to print debug log messages only for MySQL blocks, etc.
+
+    my ( $datasource, $bucketfullpath, $shouldUseTempFile, $logger ) = @_;
 
     if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
         $logger->warn("Skipping $bucketfullpath -- already done today");
@@ -551,7 +552,7 @@ sub sendToS3 {
             $logger->debug(`$send_to_s3 $bucketfullpath <  $tempfile`);
         }
 
-        deleteOnError();
+        deleteOnError( $bucketfullpath, $logger );
 
         # delete the remnants of the temp file if there was one.
         $logger->info("Deleting temp file [ $tempfile ].");
@@ -568,9 +569,7 @@ sub sendToS3 {
 }
 
 sub deleteOnError {
-    my ($bucketfullpath) = @_;
-
-    my $logger = Log::Log4perl::get_logger("main.S3");
+    my ( $bucketfullpath, $logger ) = @_;
 
     if ( $? != 0 ) {
         $logger->error("Backup to $bucketfullpath failed: $!");

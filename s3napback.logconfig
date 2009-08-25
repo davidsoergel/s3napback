@@ -58,4 +58,8 @@ log4perl.appender.Logfile.layout.ConversionPattern = %d %p %m%n
 
 
 log4perl.logger.main = INFO
-#log4perl.logger.customers.get = DEBUG
+log4perl.logger.main.Directory = INFO
+log4perl.logger.main.Subversion = INFO
+log4perl.logger.main.MySQL = INFO
+log4perl.logger.main.S3 = INFO
+
