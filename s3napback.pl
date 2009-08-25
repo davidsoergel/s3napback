@@ -64,7 +64,7 @@ my $curPath = dirname( rel2abs($0) ) . "/";
 
 ###### Setup logging
 
-Log::Log4perl->init("${curPath}s3napback.logconfig);
+Log::Log4perl->init("${curPath}s3napback.logconfig");
 
 sub main() {
 
