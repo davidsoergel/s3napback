@@ -66,9 +66,10 @@ my $curPath = dirname( rel2abs($0) ) . "/";
 
 my $conf_file = 's3napback.logconfig';
 Log::Log4perl->init($conf_file);
-my $logger = Log::Log4perl::get_logger();
 
 sub main() {
+
+    my $logger = Log::Log4perl::get_logger("main");
 
 ###### Print the header
 
@@ -130,6 +131,7 @@ sub main() {
 
         $tempdir = $mainConfig->get("TempDir");
         if ( defined $tempdir ) {
+
             #  $tempdir || die "TempDir must be defined.";
 
             # insure that $tempdir ends with a slash
@@ -217,6 +219,8 @@ sub main() {
 sub processBlock() {
     my ($config) = @_;
 
+    my $logger = Log::Log4perl::get_logger("main");
+
     for my $name ( $config->get("Directory") ) {
 
         #print "Directory $name\n";
@@ -275,6 +279,8 @@ sub backupDirectory {
     my ( $name, @cyclespec, @excludes ) = @_;
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
+    my $logger = Log::Log4perl::get_logger("main.Directory");
+
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
         return;
@@ -321,6 +327,8 @@ sub backupMysql {
     my ( $name, @cyclespec ) = @_;
 
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
+
+    my $logger = Log::Log4perl::get_logger("main.MySQL");
 
     # note $diffs is ignored
 
@@ -376,6 +384,8 @@ sub backupSubversionDir {
     my ( $name, @cyclespec ) = @_;
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
+    my $logger = Log::Log4perl::get_logger("main.Subversion");
+
     # this will be rechecked for each individual directory, but we may as well abort now if it's the wrong day
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -404,6 +414,8 @@ sub backupSubversion {
     my ( $name, @cyclespec ) = @_;
 
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
+
+    my $logger = Log::Log4perl::get_logger("main.Subversion");
 
     if ( ( $yday + $phase ) % $frequency != 0 ) {
         $logger->warn("Skipping $name");
@@ -481,6 +493,8 @@ sub backupSubversion {
 sub sendToS3 {
     my ( $datasource, $bucketfullpath, $shouldUseTempFile ) = @_;
 
+    my $logger = Log::Log4perl::get_logger("main.S3");
+
     if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
         $logger->warn("Skipping $bucketfullpath -- already done today");
         return;
@@ -555,6 +569,8 @@ sub sendToS3 {
 
 sub deleteOnError {
     my ($bucketfullpath) = @_;
+
+    my $logger = Log::Log4perl::get_logger("main.S3");
 
     if ( $? != 0 ) {
         $logger->error("Backup to $bucketfullpath failed: $!");
