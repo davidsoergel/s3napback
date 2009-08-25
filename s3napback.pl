@@ -46,6 +46,7 @@ use File::Spec::Functions qw(rel2abs);
 use File::Basename;
 
 my $diffdir;
+my $tempdir;
 my $bucket;
 my $recipient;
 my $encrypt;
