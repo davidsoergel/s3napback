@@ -315,7 +315,7 @@ sub backupDirectory {
         $excludes .= " --exclude $exclude";
     }
 
-    my $datasource     = "tar $excludes -g $difffile -C / -czp $name";
+    my $datasource     = "tar -f - $excludes -g $difffile -C / -czp $name";
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Directory $name -> $bucketfullpath");
