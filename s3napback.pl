@@ -3,7 +3,7 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Version 1.04rc1
+# Version 1.04
 #
 # Copyright (c) 2008-2009 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
@@ -545,7 +545,7 @@ sub sendToS3 {
         $logger->debug(`$datasource $encrypt > $tempfile`);
 
         if ( $? != 0 ) {
-            $logger->error("Could stream to temporary file: $!");
+            $logger->error("Failed to stream to temporary file: $!");
         }
         else {
             $logger->debug(`$send_to_s3 $bucketfullpath <  $tempfile`);
