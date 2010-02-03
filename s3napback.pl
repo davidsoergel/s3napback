@@ -49,7 +49,7 @@ my $diffdir;
 my $tempdir;
 my $bucket;
 my $recipient;
-my $encrypt;
+my $encrypt = 0;
 my $delete_from_s3;
 my $send_to_s3;
 
@@ -597,6 +597,7 @@ sub cyclespec {
     if ( !defined $phase )     { $phase     = 0; }
     if ( !defined $diffs )     { $diffs     = 6; }
     if ( !defined $fulls )     { $fulls     = 4; }
+    if ( !defined $usetemp )   { $usetemp   = 0; }
 
     return ( $frequency, $phase, $diffs, $fulls, $usetemp );
 }
