@@ -3,7 +3,7 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Version 1.04
+# Version 1.05
 #
 # Copyright (c) 2008-2009 David Soergel
 # 418 Richmond St., El Cerrito, CA  94530
@@ -232,8 +232,9 @@ sub processBlock() {
         }
 
         my @excludes = $block->get("Exclude");
-
-        backupDirectory( $name, cyclespec($block), @excludes );
+		my @cyclespec = cyclespec($block);
+		
+        backupDirectory( $name, \@cyclespec, \@excludes );
     }
 
     for my $name ( $config->get("Subversion") ) {
@@ -275,7 +276,10 @@ sub processBlock() {
 }
 
 sub backupDirectory {
-    my ( $name, @cyclespec, @excludes ) = @_;
+    my ( $name, $cyclespecR, $excludesR ) = @_;
+	my @cyclespec = @$cyclespecR;
+	my @excludes = @$excludesR;
+
     my ( $frequency, $phase, $diffs, $fulls, $usetemp ) = @cyclespec;
 
     my $logger = Log::Log4perl::get_logger("Backup::S3napback::Directory");
