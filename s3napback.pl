@@ -462,7 +462,10 @@ sub sendToS3 {
     # setup in case this is a temp file scenario
     my $tempfile = $bucketfullpath . ".temp";
     $tempfile =~ s/\//_/g;
-    $tempfile = $tempdir . $tempfile;
+    if ( $shouldUseTempFile == 1 ) {
+        $tempdir || $logger->logdie("TempDir must be defined in order to UseTempFile.");
+        $tempfile = $tempdir . $tempfile;
+    }
 
     if ( $opt{t} ) {
         $logger->info("$delete_from_s3 $bucketfullpath");
@@ -493,7 +496,6 @@ sub sendToS3 {
     }
 
     if ( $shouldUseTempFile == 1 ) {
-        $tempdir || $logger->logdie("TempDir must be defined in order to UseTempFile.");
 
         # stream the data to a temp file first, then to jS3tream
         $logger->info("Using temp file to buffer before streaming [ $tempfile ]...");
