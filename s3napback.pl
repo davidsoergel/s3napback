@@ -3,10 +3,10 @@
 # s3napback.pl
 # Manage cycling, incremental, compressed, encrypted backups on Amazon S3.
 #
-# Version 1.12  (May 24, 2011)
+# Version 1.13-dev  (August 27, 2012)
 #
-# Copyright (c) 2008-2011 David Soergel
-# 178 West St., Northampton, MA  01060
+# Copyright (c) 2008-2012 David Soergel
+# 28 Mountain Laurel Path, Northampton, MA  01062
 # dev@davidsoergel.com
 #
 # With major contributions by Kevin Ross and Scott Squires
@@ -245,7 +245,11 @@ sub processBlock() {
 
                 case "Subversion"    { $function = \&backupSubversion; }
                 case "SubversionDir" { $function = \&backupSubversionDir; }
-                case "MySQL"         { $function = \&backupMysql; }
+                case "MySQL"         {
+                    my $mysqlopts = $block->get("MySQLOptions");
+                    @params = ( $mysqlopts );
+					$function = \&backupMysql;
+					}
                 case "PostgreSQL"    { $function = \&backupPostgreSQL; }
             }
 
@@ -286,6 +290,8 @@ sub backupDirectory {
     }
 
     my $datasource     = "tar -f - $excludes -g $difffile -C / -czp $name";
+	$logger->debug($datasource);
+
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Directory $name -> $bucketfullpath");
@@ -293,7 +299,7 @@ sub backupDirectory {
 }
 
 sub backupMysql {
-    my ( $name, $cyclespec ) = @_;
+    my ( $name, $cyclespec, $mysqloptions ) = @_;
     my ( $cycletype, $frequency, $phase, $diffs, $fulls, $discs, $archivedisc, $usetemp ) = @{$cyclespec};
 
     my $logger = Log::Log4perl::get_logger("Backup::S3napback::MySQL");
@@ -311,7 +317,8 @@ sub backupMysql {
         $name      = $2;
     }
     if ( $name eq "all" ) { $name = "--all-databases"; }
-    my $datasource = "mysqldump --opt $socketopt $name | gzip";
+    my $datasource = "mysqldump --opt $socketopt $mysqloptions $name | gzip";
+	$logger->debug($datasource);
 
     if ($socket) {
         $name = "$socket/$name";
@@ -348,6 +355,7 @@ sub backupPostgreSQL {
     }
 
     my $datasource = "$pg_dump_cmd $user_opt $name | gzip";
+	$logger->debug($datasource);
 
     my $bucketfullpath = "$bucket:PostgreSQL/$name-$cyclenum";
     $logger->info("PostgreSQL $name -> $bucketfullpath");
@@ -436,6 +444,7 @@ sub backupSubversion {
     my $toRevision   = $headRevision;
 
     my $datasource     = "svnadmin dump -q -r$fromRevision:$toRevision --incremental $name | gzip";
+	$logger->debug($datasource);
     my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
 
     $logger->info("Subversion $name -> $bucketfullpath");
@@ -516,9 +525,9 @@ sub sendToS3 {
 
     }
     else {
-
+		$logger->debug("$datasource $encrypt | $send_to_s3 $bucketfullpath");        
         # stream the data
-        $logger->debug(`$datasource $encrypt | $send_to_s3 $bucketfullpath`);
+		$logger->debug(`$datasource $encrypt | $send_to_s3 $bucketfullpath`);
         deleteOnError();
     }
 }
