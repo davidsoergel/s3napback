@@ -21,8 +21,8 @@ Manual
 
  * [Introduction](#introduction)
  * [Quick Start](#quick-start)
- * [Principles of Operation](@principles-of-operation)
- * [Configuration Options](@configuration-options)
+ * [Principles of Operation](#principles-of-operation)
+ * [Configuration Options](#configuration-options)
  * [Recovery](#recovery)
  * [Future Improvements](#future-improvements)
 
