@@ -17,16 +17,16 @@ s3napback is basically a convenience wrapper around [js3tream](http://js3tream.s
 
 
 == Manual ==
- * [wiki:ManualIntroduction Introduction]
- * [wiki:QuickStart Quick Start]
+ * [Introduction](#introduction)
+ * [Quick Start](#quick-start)
  * [wiki:PrinciplesOfOperation Principles of Operation]
  * [wiki:ConfigurationOptions Configuration Options]
  * [wiki:Recovery Recovery]
  * [wiki:FutureImprovements Future Improvements]
 
- 
-The problem
------------
+
+Introduction
+------------
 
 In searching for a way to back up one of my Linux boxes to Amazon S3, I was surprised to find that none of the many backup methods and scripts I found on the net did what I wanted, so I wrote yet another one.
 
