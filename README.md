@@ -16,7 +16,9 @@ _Cycling, Incremental, Compressed, Encrypted Backups to Amazon S3_
 s3napback is basically a convenience wrapper around [js3tream](http://js3tream.sourceforge.net/), and is at least partly inspired by the [snapback2](http://www.perusion.com/misc/Snapback2/) script (which is still a great solution for incremental rsync-based backups to your own disks).
 
 
-== Manual ==
+Manual
+======
+
  * [Introduction](#introduction)
  * [Quick Start](#quick-start)
  * [wiki:PrinciplesOfOperation Principles of Operation]
@@ -39,7 +41,7 @@ The design requirements were:
 
 As far as I could tell, no available backup script (including, e.g. s3sync, backup-manager, s3backup, etc. etc.) met all four requirements.
 
-The closest thing is [http://js3tream.sourceforge.net js3tream], which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [http://js3tream.sourceforge.net/linux_tar.html suggested] by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce [source:trunk/s3backup-gpg-streaming.sh s3backup-gpg-streaming.sh].
+The closest thing is [js3tream](http://js3tream.sourceforge.net), which handles streaming and splitting, but not incrementalness or encryption.  Those are both fairly easy to add, though, using tar and gpg, as [suggested](http://js3tream.sourceforge.net/linux_tar.html) by the js3tream author.  However, the s3backup.sh script he provides uses temp files (unnecessarily), and does not encrypt.  So I modified it a bit to produce [s3backup-gpg-streaming.sh](source:trunk/s3backup-gpg-streaming.sh).
 
 That's not the end of the story, though, since it leaves open the problem of managing the backup rotation.  I found the explicit cron jobs suggested on the js3tream site too messy, especially since I sometimes want to back up a lot of different directories.  Some other available solutions will send incremental backups to S3, but never purge the old ones, and so use ever more storage.
 
@@ -77,7 +79,8 @@ secret=your AWS secret
 ```
 You probably want to take care that this file is readable only by the user that s3napback will be running as, so `chown` and `chmod 600` it, as appropriate.
 
-== GPG configuration ==
+GPG configuration
+-----------------
 
 _Note: if you don't care about encryption, you can skip this section, and simply don't specify a GpgRecipient in the configuration file below._
 
@@ -273,17 +276,17 @@ Configuration Options
 
 _First off you'll need some general configuration statements:_
 
-DiffDir
+DiffDir:
   a directory where tar can store its diff files (necessary for incremental backups).
 
-TempDir
+TempDir:
   to store MySQL dumps or other content that can't be streamed to S3 without risking timeouts. Only matters if UseTempFile is set.
 
 Bucket
-   the destination bucket on S3.
+: the destination bucket on S3.
 
 GpgRecipient
-  the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.  If this option is not specified, no encryption is performed.
+: the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.  If this option is not specified, no encryption is performed.
 
 GpgKeyring
   path to the keyring file containing the public key for the !GpgRecipient.  Defaults to ~/.gnupg/pubring.gpg
