@@ -60,7 +60,7 @@ Prerequisites
  * gpg (if you want encryption)
 
  * Date::Format
- * Config::!ApacheFormat
+ * Config::ApacheFormat
  * Log::Log4Perl
 
 On many systems you can install the latter three packages from the command line like this:
@@ -102,7 +102,7 @@ gpg --edit-key backup@example.com
 
 then (in the gpg key editing interface), "trust" the key.
 
-If you want to run s3napback as root (e.g., from cron), you'll want to make sure that the right gpg keyring is used.  Gpg will look for a keyring under ~/.gnupg, but on some systems /etc/crontab sets the HOME environment variable to "/"; consequently during the cron job gpg may look in /.gnupg instead of /root/.gnupg.  Thus, you may want to change /etc/crontab to set HOME to "/root"; or actually create and populate /.gnupg; or just use the !GpgKeyring option in the s3napback config file to specify a keyring explicitly.
+If you want to run s3napback as root (e.g., from cron), you'll want to make sure that the right gpg keyring is used.  Gpg will look for a keyring under ~/.gnupg, but on some systems /etc/crontab sets the HOME environment variable to "/"; consequently during the cron job gpg may look in /.gnupg instead of /root/.gnupg.  Thus, you may want to change /etc/crontab to set HOME to "/root"; or actually create and populate /.gnupg; or just use the GpgKeyring option in the s3napback config file to specify a keyring explicitly.
 
 Defining backup sets
 --------------------
@@ -261,13 +261,16 @@ The decaying properties of the Hanoi schedule are excellently described [elsewhe
 Command Line Options
 ====================
 
--c <filename>
+`-c <filename>`
   path to the configuration file
--t
+  
+`-t`
   test mode; report what would be done, but don't actually do anything
--f
+  
+`-f`
   force backup even if it has already been done today (use with caution; this may overwrite the current diff and thereby lose data)
--d
+  
+`-d`
   print debug messages
 
 
@@ -276,20 +279,20 @@ Configuration Options
 
 _First off you'll need some general configuration statements:_
 
-DiffDir:
+`DiffDir`
   a directory where tar can store its diff files (necessary for incremental backups).
 
-TempDir:
+`TempDir`
   to store MySQL dumps or other content that can't be streamed to S3 without risking timeouts. Only matters if UseTempFile is set.
 
-Bucket
-: the destination bucket on S3.
+`Bucket`
+  the destination bucket on S3.
 
-GpgRecipient
-: the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.  If this option is not specified, no encryption is performed.
+`GpgRecipient`
+  the address of the public key to use for encryption.  The gpg keyring of the user you're running the script as (i.e., root, for a systemwide cron job) must contain a matching key.  If this option is not specified, no encryption is performed.
 
 GpgKeyring
-  path to the keyring file containing the public key for the !GpgRecipient.  Defaults to ~/.gnupg/pubring.gpg
+  path to the keyring file containing the public key for the GpgRecipient.  Defaults to ~/.gnupg/pubring.gpg
 
 S3KeyFile
   the file containing your AWS authentication keys.
@@ -303,24 +306,24 @@ _Then you can specify as many directories, databases, and repositories as you li
   <name>: a unique identifier for the cycle.  This is not used except to establish the uniqueness of each block.
 
 CycleType
-  Use "SimpleCycle" (default) to make backups at regular intervals (e.g., every day) with no decaying behavior.  Use "HanoiCycle" for a decaying schedule, i.e. to store a few old backups and a lot of recent ones (thanks to Scott Squires for implementing !HanoiCycle).
+  Use "SimpleCycle" (default) to make backups at regular intervals (e.g., every day) with no decaying behavior.  Use "HanoiCycle" for a decaying schedule, i.e. to store a few old backups and a lot of recent ones (thanks to Scott Squires for implementing HanoiCycle).
 
 Frequency (when using either cycle type)
   how often a backup should be made at all, in days.
 
-Phase (when using !SimpleCycle only)
+Phase (when using SimpleCycle only)
   Allows adjusting the day on which the backup is made, with respect to the frequency.  Can take values 0 <= Phase < Frequency; defaults to 0.  This can be useful, for instance, if you want to alternate daily backups between two backup sets.  This can be accomplished by creating two nearly identical backup specifications, both with Frequency 2, but where one has a Phase of 0 and the other has a Phase of 1.
 
-Diffs (when using !SimpleCycle only)
+Diffs (when using SimpleCycle only)
   tells how many incremental backups to make between full backups.  E.g., if you want daily diffs and weekly fulls, set this to 6.
 
-Fulls (when using !SimpleCycle only)
+Fulls (when using SimpleCycle only)
   tells how many total cycles to keep.  This should be at least 2.  With only one slot, you'd have no protection while a backup is running, since the old contents of the slot are deleted before the new contents are written.
 
-Discs (when using !HanoiCycle only)
+Discs (when using HanoiCycle only)
   The number of full backups to keep on a decaying schedule (e.g., setting this to 4 should provide backups that are one day, two days, four days, and eight days old, more or less depending on the current day relative to the Hanoi rotation).  Managing incremental backups on a decaying cycle would be very messy, so all backups using the Hanoi cycle are full backups, not diffs.
 
-!ArchiveOldestDisc (when using !HanoiCycle only) (default false)
+ArchiveOldestDisc (when using HanoiCycle only) (default false)
   If all the slots specified by the Discs parameter are in use and the new backup would overwrite the oldest slot, keep an archive copy of the oldest backup.  For example, with 5 discs, this would result in having recent backups of 1, 2, 4, and 8 days ago, and archived backups every 16 days (16, 32, 48, etc. days ago).  Using an analogy to backup tapes, this is like removing the tape with your oldest backup after each full cycle, putting it into storage, and adding a fresh tape into the rotation.
 
   This causes the total volume of backup data to grow indefinitely.  Depending on your needs, it may make sense to use a fairly large number of discs, so as to keep a few very old backups while rarely triggering the archival condition.
@@ -341,19 +344,19 @@ PostgreSQL <databasename>    or    <PostgreSQL databasename>
 
 Subversion <repository>    or    <Subversion repository>
   In order for this to work, the user you're running the script as must have permission to svnadmin dump the requested repository.
-  <repository> names a single svn repository to be backed up.  Incremental backups are handled by storing the latest backed-up revision number in a file under !DiffDir.  As elsewhere, setting Diffs to 0 (or just leaving it out) results in a full dump every time.  (Thanks to Kevin Ross for adding the incremental behavior here). 
+  <repository> names a single svn repository to be backed up.  Incremental backups are handled by storing the latest backed-up revision number in a file under DiffDir.  As elsewhere, setting Diffs to 0 (or just leaving it out) results in a full dump every time.  (Thanks to Kevin Ross for adding the incremental behavior here). 
 
-!SubversionDir <repository-dir>    or    <SubversionDir repository-dir>
+SubversionDir <repository-dir>    or    <SubversionDir repository-dir>
   <repository-dir> a directory containing multiple subversion repositories, all of which should be backed up.
   (this feature was inspired by http://www.hlynes.com/2006/10/01/backups-part-2-subversion)
 
-!UseTempFile
+UseTempFile
   Causes the data to be backed up to be dumped to a local file before being streamed to S3. Set to 0 or 1.  This is most useful in a MySQL block, because the slow upload speed to S3 can cause mysqldump to time out when dumping large tables.  Letting mysqldump write to a temp file before uploading it obviously avoids this problem.  An alternate solution is to set long mysqld timeouts in my.cnf:
 ```
 net_read_timeout=3600
 net_write_timeout=3600
 ```
-That may be the right solution for some circumstances, e.g. if the databases are larger than the available scratch disk.  The !UseTempFile configuration will work for regular filesystem backups and Subversion backups as well, at the cost of (temporary) disk space and more disk activity.
+That may be the right solution for some circumstances, e.g. if the databases are larger than the available scratch disk.  The UseTempFile configuration will work for regular filesystem backups and Subversion backups as well, at the cost of (temporary) disk space and more disk activity.
 
 Recovery
 ========
