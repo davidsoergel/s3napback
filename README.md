@@ -21,10 +21,10 @@ Manual
 
  * [Introduction](#introduction)
  * [Quick Start](#quick-start)
- * [wiki:PrinciplesOfOperation Principles of Operation]
- * [wiki:ConfigurationOptions Configuration Options]
- * [wiki:Recovery Recovery]
- * [wiki:FutureImprovements Future Improvements]
+ * [Principles of Operation](@principles-of-operation)
+ * [Configuration Options](@configuration-options)
+ * [Recovery](#recovery)
+ * [Future Improvements](#future-improvements)
 
 
 Introduction
