@@ -1,5 +1,4 @@
-s3napback
-=========
+# s3napback
 
 _Cycling, Incremental, Compressed, Encrypted Backups to Amazon S3_
 
@@ -13,11 +12,9 @@ _Cycling, Incremental, Compressed, Encrypted Backups to Amazon S3_
  * Integrated handling of PostgreSQL dumps (thanks to Scott Squires)
  * Integrated handling of Subversion repositories, and of directories containing multiple Subversion repositories (including incremental backups-- thanks to Kevin Ross).
 
-s3napback is basically a convenience wrapper around [js3tream](http://js3tream.sourceforge.net/), and is at least partly inspired by the [snapback2](http://www.perusion.com/misc/Snapback2/) script (which is still a great solution for incremental rsync-based backups to your own disks).
+s3napback is basically a convenience wrapper around S3 streaming utilities [js3tream](http://js3tream.sourceforge.net/) or [s3gof3r](https://github.com/rlmcpherson/s3gof3r), and is at least partly inspired by the [snapback2](http://www.perusion.com/misc/Snapback2/) script (which is still a great solution for incremental rsync-based backups to your own disks).
 
-
-Manual
-======
+# Manual
 
  * [Introduction](#introduction)
  * [Quick Start](#quick-start)
@@ -27,8 +24,7 @@ Manual
  * [Future Improvements](#future-improvements)
 
 
-Introduction
-------------
+## Introduction
 
 In searching for a way to back up one of my Linux boxes to Amazon S3, I was surprised to find that none of the many backup methods and scripts I found on the net did what I wanted, so I wrote yet another one.
 
@@ -45,17 +41,29 @@ The closest thing is [js3tream](http://js3tream.sourceforge.net), which handles 
 
 That's not the end of the story, though, since it leaves open the problem of managing the backup rotation.  I found the explicit cron jobs suggested on the js3tream site too messy, especially since I sometimes want to back up a lot of different directories.  Some other available solutions will send incremental backups to S3, but never purge the old ones, and so use ever more storage.
 
-Finally, I wanted to easily deal with MySQL and Subversion dumps.
+Finally, I wanted to easily deal with MySQL and Subversion dumps. s3napback now handles PostgreSQL backups as well.
 
-Quick Start
-===========
+### Multipart Upload
+
+When js3tream was written, it was prudent to split a large archive into smaller pieces to mitigate the impact of failures during file transfer. Since late 2010, S3 has supported multi-part upload (and download). This removes the need to split an upload into many pieces since individual parts can be re-tried on failure during upload or download. Each part as well as the whole can be verified against corruption through the use of md5 hashes for both upload and download. Uploading the whole archive not only makes it easier to browse the backup files, but also removes complexity by not having to re-assemble the pieces when restoring from backup.
+
+The [s3gof3r](https://github.com/rlmcpherson/s3gof3r) project provides functionality for multipart uploads and downloads, including md5 verification to protect against corruption during transfer. s3gof3r can also upload parts concurrently, resulting in faster transfer times.
+
+## Quick Start
 
 Clone this repo, or [download](https://github.com/davidsoergel/s3napback/archive/master.zip) and extract the s3napback package.  There's no "make" or any such needed, so just extract it to some convenient location (I use /usr/local/s3napback).
 
-Prerequisites
--------------
+### Prerequisites
+
+js3tream:
 
  * Java 1.5 or above.  Note that you must use the standard Sun JDK (or JRE); libgcj will not work.  (The s3napback script just executes whatever "java" it finds in the path, so you may need to adjust your path so that the Sun java takes precedence.  On some systems there are symlinks in /etc/alternatives that point at one version or the other.)
+
+s3gof3r:
+
+ * gof3r installed in the path (get the latest version from https://github.com/rlmcpherson/s3gof3r/releases).
+
+s3napback:
 
  * gpg (if you want encryption)
 
@@ -68,9 +76,9 @@ On many systems you can install the latter three packages from the command line 
 sudo cpan Date::Format Config::ApacheFormat Log::Log4perl
 ```
 
+On debian, the corresponding system packages are libtimedate-perl, libconfig-apacheformat-perl, and liblog-log4perl-perl.
 
-S3 configuration
-----------------
+### S3 configuration
 
 Configure s3napback with your S3 login information by creating a file called e.g. /usr/local/s3napback/key.txt containing
 ```
@@ -79,8 +87,7 @@ secret=your AWS secret
 ```
 You probably want to take care that this file is readable only by the user that s3napback will be running as, so `chown` and `chmod 600` it, as appropriate.
 
-GPG configuration
------------------
+### GPG configuration
 
 _Note: if you don't care about encryption, you can skip this section, and simply don't specify a GpgRecipient in the configuration file below._
 
@@ -104,8 +111,7 @@ then (in the gpg key editing interface), "trust" the key.
 
 If you want to run s3napback as root (e.g., from cron), you'll want to make sure that the right gpg keyring is used.  Gpg will look for a keyring under ~/.gnupg, but on some systems /etc/crontab sets the HOME environment variable to "/"; consequently during the cron job gpg may look in /.gnupg instead of /root/.gnupg.  Thus, you may want to change /etc/crontab to set HOME to "/root"; or actually create and populate /.gnupg; or just use the GpgKeyring option in the s3napback config file to specify a keyring explicitly.
 
-Defining backup sets
---------------------
+### Defining backup sets
 
 Create a configuration file something like this (descriptions of the options are [wiki:ConfigurationOptions here], if they're not entirely obvious):
 ```
@@ -212,8 +218,7 @@ ChunkSize 25000000
 </Subversion>
 ```
 
-Run the backup
---------------
+### Run the backup
 
 To run it, just run the script, passing the config file with the -c option:
 ```
@@ -221,21 +226,18 @@ To run it, just run the script, passing the config file with the -c option:
 ```
 That's it!  You can put that command in a cron job to run once a day.
 
-Logging
--------
+### Logging
 
 The log destinations and formatting are specified in s3napback.logconfig included in the package archive.  Log
 rotation and emailing work too as long as you install Log::Dispatch (`sudo cpan Log::Dispatch`)
 and Mail::Sender (`sudo cpan Mail::Sender`), as needed.
 
 
-Principles of operation
-=======================
+# Principles of operation
 
 There are two available "cycle types" that govern the timing and order of overwriting old backups: a "Simple" cycle that keeps backups at fixed intervals, and a "Hanoi" cycle that keeps backups on a decaying schedule.  Only the Simple cycle allows incremental backups.
 
-SimpleCycle
------------
+## SimpleCycle
 
 The cycling of backup sets here is rudimentary, taking its inspiration from the [cron job approach](http://js3tream.sourceforge.net/linux_tar.html) given on the js3tream page.  The principle is that we'll sort the snapshots into a fixed number of "slots"; every new backup simply overwrites the oldest slot, so we don't need to explicitly purge old files.
 
@@ -252,14 +254,12 @@ to this one:
 where the full backup on which the six oldest diffs are based is gone, so in fact you can only fully reconstruct the last 8 days.  You can still retrieve files that changed on the days represented by the old diffs, of course.
 
 
-HanoiCycle
-----------
+## HanoiCycle
 
-The decaying properties of the Hanoi schedule are excellently described [elsewhere](http://www.alvechurchdata.co.uk/softhanoi.htm).  Briefly: full backups are made every day, but are overwritten in an order that results in ages distributed as powers of two, e.g. 1, 2, 4, 8, and 16 days old (etc.).
+The decaying properties of the Hanoi schedule are excellently described [elsewhere](https://web.archive.org/web/20131029193450/http://www.alvechurchdata.co.uk/softhanoi.htm).  Briefly: full backups are made every day, but are overwritten in an order that results in ages distributed as powers of two, e.g. 1, 2, 4, 8, and 16 days old (etc.).
 
 
-Command Line Options
-====================
+# Command Line Options
 
 `-c <filename>`
   path to the configuration file
@@ -274,10 +274,12 @@ Command Line Options
   print debug messages
 
 
-Configuration Options
-=====================
+# Configuration Options
 
 _First off you'll need some general configuration statements:_
+
+`StreamProgram`
+  which program to use to send the backup to S3. Either js3tream or gof3r. If not specified, it defaults to js3tream.
 
 `DiffDir`
   a directory where tar can store its diff files (necessary for incremental backups).
@@ -298,7 +300,10 @@ _First off you'll need some general configuration statements:_
   the file containing your AWS authentication keys.
 
 `ChunkSize`
-  the size of the chunks to be stored on S3, in bytes.
+  when using js3tream as the stream program: the size of the chunks to be stored on S3, in bytes. When using gof3r as the stream program: the size of the concurrent upload parts, in bytes.
+
+`ConcurrentTransferCount`
+  the number of concurrent S3 transfers to perform at a time. The file is split into parts of ChunkSize bytes each, and up to ConcurrentTransferCount parts are uploaded in parallel. Only valid with gof3r. If not specified, it defaults to 1.
 
 _Then you can specify as many directories, databases, and repositories as you like to be backed up.  These may be contained in <Cycle> blocks, for the sake of reusing timing configuration, or may be blocks themselves with individual timings._
 
@@ -358,8 +363,7 @@ net_write_timeout=3600
 ```
 That may be the right solution for some circumstances, e.g. if the databases are larger than the available scratch disk.  The UseTempFile configuration will work for regular filesystem backups and Subversion backups as well, at the cost of (temporary) disk space and more disk activity.
 
-Recovery
-========
+# Recovery
 
 Recovery is not automated, but if you need it, you'll be motivated to follow this simple manual process.
 
@@ -374,7 +378,6 @@ Note that because of the streaming nature of all this, you can extract part of a
 java -jar js3tream.jar --debug -n -f -v -K $s3keyfile -o -b $bucket:$name | gpg -d | tar xvz /path/to/desired/file
 ```
 
-
 The name of the file you want ("$name" above) has the slot number and the type (FULL or DIFF) appended to it before being sent to S3.  So it likely has a name like 
 `mybucket:/some/path-5-FULL` or some such.
 
@@ -386,11 +389,8 @@ js3tream breaks the files into chunks, and appends the chunk number after a colo
 
 Finally note that the resulting file is in fact a tar file (or the gpg-encrypted version of that, if enabled), though it may not automatically get a .tar extension.
 
+# Future Improvements
 
-Future Improvements
-===================
-
- * S3 uploads could be done in parallel, since that can speed things up a lot
  * Recovery could be automated
  * It's always possible to make the code cleaner, improve error handling, etc.
 

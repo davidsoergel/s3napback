@@ -25,8 +25,9 @@ my $tempdir;
 my $bucket;
 my $recipient;
 my $encrypt = "";
-my $delete_from_s3;
-my $send_to_s3;
+my $stream_program;
+my $s3_cmd_format_send;
+my $s3_cmd_format_delete;
 
 my %isAlreadyDoneToday = ();
 my %opt;
@@ -96,6 +97,12 @@ sub main() {
 
         $logger->debug( "config=" . $mainConfig->dump() );
 
+        $stream_program = $mainConfig->get("StreamProgram");
+        $stream_program or $stream_program = "js3tream";
+        if ( ($stream_program ne "js3tream") && ($stream_program ne "gof3r") ) {
+            die "StreamProgram must be js3tream or gof3r";
+        }
+
         $diffdir = $mainConfig->get("DiffDir");
         $diffdir || die "DiffDir must be defined.";
 
@@ -139,6 +146,9 @@ sub main() {
         my $chunksize = $mainConfig->get("ChunkSize");
         $chunksize || die "ChunkSize must be defined.";
 
+        my $concurrentTransferCount = $mainConfig->get("ConcurrentTransferCount");
+        $concurrentTransferCount or $concurrentTransferCount = 1;
+
         ###### Check gpg key availability
 
         if ( defined $recipient ) {
@@ -154,25 +164,39 @@ sub main() {
             $encrypt = "| gpg --batch $keyring -r $recipient -e";
         }
 
-        $send_to_s3     = "java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b";    # -Xmx128M
-        $delete_from_s3 = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b";
+        switch ($stream_program) {
+            case "js3tream" {
+                $s3_cmd_format_send = "java -jar ${curPath}js3tream.jar --debug -z $chunksize -n -f -v -K $s3keyfile -i -b %1\$s:%2\$s";
+                $s3_cmd_format_delete = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -d -b %1\$s:%2\$s";
+            }
+            
+            case "gof3r" {
+                exportAWSCredentials($s3keyfile);
+                $s3_cmd_format_send = "gof3r put --partsize=$chunksize --concurrency=$concurrentTransferCount --bucket=%1\$s --key=%2\$s";
+                $s3_cmd_format_delete = "gof3r rm s3://%1\$s/%2\$s";
+            }
+        }
 
         ###### Check what has already been done
 
-        my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
+        # gof3r doesn't have a list bucket command, so until we decide which dependency to add in order to 
+        # list buckets (or perhaps contribute a patch to gof3r), only do this check if we're using js3tream
+        if ($stream_program eq "js3tream") {
+            my $list_s3_bucket = "java -jar ${curPath}js3tream.jar -v -K $s3keyfile -l -b $bucket 2>&1";
 
-        $logger->info("Getting current contents of bucket $bucket modified on $datestring...");
-        my @bucketlist = `$list_s3_bucket`;
+            $logger->info("Getting current contents of bucket $bucket modified on $datestring...");
+            my @bucketlist = `$list_s3_bucket`;
 
-        $logger->debug( join "\n", @bucketlist );
+            $logger->debug( join "\n", @bucketlist );
 
-        my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
+            my @alreadyDoneToday = grep /$datestring/, @bucketlist;    ######### THIS DID NOT WORK BEFORE, TEST AGAIN #########
 
-        # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
-        @alreadyDoneToday = map { s/^.* - (.*?) - .*$/$1/; chomp; $_ } @alreadyDoneToday;
+            # 2008-04-10 04:07:50 - dev.davidsoergel.com.backup1:MySQL/all-0 - 153.38k in 1 data blocks
+            @alreadyDoneToday = map { s/^.* - (.*?) - .*$/$1/; chomp; $_ } @alreadyDoneToday;
 
-        $logger->info("Buckets already done today:");
-        for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
+            $logger->info("Buckets already done today:");
+            for (@alreadyDoneToday) { $logger->info($_); $isAlreadyDoneToday{$_} = 1; }
+        }
 
         ###### Perform the requested operations
 
@@ -183,6 +207,34 @@ sub main() {
             processBlock($block);
         }
     }
+}
+
+sub exportAWSCredentials {
+    my $s3keyfile = shift;
+
+    my $aws_access_key_id;
+    my $aws_secret_access_key;
+
+    open(AWSKEYS, "$s3keyfile") or die "Can't open $s3keyfile";
+    my $awskeys = do { local $/; <AWSKEYS> };
+    close(AWSKEYS);
+
+    if ($awskeys =~ m/^key=(.*)$/m) {
+        $aws_access_key_id = $1;
+    }
+    else {
+        die "$s3keyfile is missing aws access key id"
+    }
+
+    if ($awskeys =~ m/^secret=(.*)$/m) {
+        $aws_secret_access_key = $1;
+    }
+    else {
+        die "$s3keyfile is missing aws secret access key"
+    }
+
+    $ENV{'AWS_ACCESS_KEY_ID'} = $aws_access_key_id;
+    $ENV{'AWS_SECRET_ACCESS_KEY'} = $aws_secret_access_key;
 }
 
 sub processBlock() {
@@ -219,6 +271,7 @@ sub processBlock() {
                 case "SubversionDir" { $function = \&backupSubversionDir; }
                 case "MySQL"         {
                     my $mysqlopts = $block->get("MySQLOptions");
+                    if (!defined($mysqlopts)) { $mysqlopts = ''; }
                     @params = ( $mysqlopts );
 					$function = \&backupMysql;
 					}
@@ -264,10 +317,10 @@ sub backupDirectory {
     my $datasource     = "tar -f - $excludes -g $difffile -C / -czp $name";
 	$logger->debug($datasource);
 
-    my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
+    my $key = "$name-$cyclenum-$type";
 
-    $logger->info("Directory $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
+    $logger->info("Directory $name -> ${bucket}:${key}");
+    sendToS3( $datasource, $key, $usetemp, $logger );
 }
 
 sub backupMysql {
@@ -296,9 +349,9 @@ sub backupMysql {
         $name = "$socket/$name";
     }
 
-    my $bucketfullpath = "$bucket:MySQL/$name-$cyclenum";
-    $logger->info("MySQL $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
+    my $key = "MySQL/$name-$cyclenum";
+    $logger->info("MySQL $name -> ${bucket}:${key}");
+    sendToS3( $datasource, $key, $usetemp, $logger );
 }
 
 sub backupPostgreSQL {
@@ -329,9 +382,9 @@ sub backupPostgreSQL {
     my $datasource = "$pg_dump_cmd $user_opt $name | gzip";
 	$logger->debug($datasource);
 
-    my $bucketfullpath = "$bucket:PostgreSQL/$name-$cyclenum";
-    $logger->info("PostgreSQL $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
+    my $key = "PostgreSQL/$name-$cyclenum";
+    $logger->info("PostgreSQL $name -> ${bucket}:${key}");
+    sendToS3( $datasource, $key, $usetemp, $logger );
 }
 
 sub backupSubversionDir {
@@ -417,10 +470,10 @@ sub backupSubversion {
 
     my $datasource     = "svnadmin dump -q -r$fromRevision:$toRevision --incremental $name | gzip";
 	$logger->debug($datasource);
-    my $bucketfullpath = "$bucket:$name-$cyclenum-$type";
+    my $key = "$name-$cyclenum-$type";
 
-    $logger->info("Subversion $name -> $bucketfullpath");
-    sendToS3( $datasource, $bucketfullpath, $usetemp, $logger );
+    $logger->info("Subversion $name -> ${bucket}:${key}");
+    sendToS3( $datasource, $key, $usetemp, $logger );
 
     # Save last revision to the diff file so we know where to pick up later.
     if ( !$opt{t} ) {
@@ -433,12 +486,17 @@ sub backupSubversion {
 sub sendToS3 {
 
     # by passing the logger in here we can select to print debug log messages only for MySQL blocks, etc.
-    my ( $datasource, $bucketfullpath, $shouldUseTempFile, $logger ) = @_;
+    my ( $datasource, $key, $shouldUseTempFile, $logger ) = @_;
+
+    my $bucketfullpath = "${bucket}:${key}";
 
     if ( $isAlreadyDoneToday{$bucketfullpath} && !$opt{f} ) {
         $logger->warn("Skipping $bucketfullpath -- already done today");
         return;
     }
+
+    my $s3_cmd_delete = sprintf($s3_cmd_format_delete, $bucket, $key);
+    my $s3_cmd_send = sprintf($s3_cmd_format_send, $bucket, $key);
 
     # setup in case this is a temp file scenario
     my $tempfile = $bucketfullpath . ".temp";
@@ -449,28 +507,26 @@ sub sendToS3 {
     }
 
     if ( $opt{t} ) {
-        $logger->info("$delete_from_s3 $bucketfullpath");
+        $logger->info($s3_cmd_delete);
 
         # print out the statements for test mode.
         if ( $shouldUseTempFile == 1 ) {
-
             # stream the data to a temp file first, then to jS3tream
             $logger->info("Using temp file to buffer before streaming[ $tempfile ]...");
             $logger->info("$datasource $encrypt > $tempfile");
-            $logger->info("$send_to_s3 $bucketfullpath <  $tempfile");
+            $logger->info("$s3_cmd_send <  $tempfile");
             $logger->info("rm $tempfile");
         }
         else {
-
             # stream the data
-            $logger->info("$datasource $encrypt | $send_to_s3 $bucketfullpath");
+            $logger->info("$datasource $encrypt | $s3_cmd_send");
         }
 
         return;
     }
 
     # delete the bucket if it exists
-    $logger->debug(`$delete_from_s3 $bucketfullpath`);
+    $logger->debug(`$s3_cmd_delete`);
 
     if ( $? != 0 ) {
         $logger->error("Could not delete old backup: $!");
@@ -486,10 +542,10 @@ sub sendToS3 {
             $logger->error("Failed to stream to temporary file: $!");
         }
         else {
-            $logger->debug(`$send_to_s3 $bucketfullpath <  $tempfile`);
+            $logger->debug(`$s3_cmd_send <  $tempfile`);
         }
 
-        deleteOnError( $bucketfullpath, $logger );
+        deleteOnError( $bucketfullpath, $s3_cmd_delete, $logger );
 
         # delete the remnants of the temp file if there was one.
         $logger->info("Deleting temp file [ $tempfile ].");
@@ -497,22 +553,22 @@ sub sendToS3 {
 
     }
     else {
-		$logger->debug("$datasource $encrypt | $send_to_s3 $bucketfullpath");        
+		$logger->debug("$datasource $encrypt | $s3_cmd_send");        
         # stream the data
-		$logger->debug(`$datasource $encrypt | $send_to_s3 $bucketfullpath`);
-        deleteOnError();
+		$logger->debug(`$datasource $encrypt | $s3_cmd_send`);
+        deleteOnError( $bucketfullpath, $s3_cmd_delete, $logger );
     }
 }
 
 sub deleteOnError {
-    my ( $bucketfullpath, $logger ) = @_;
+    my ( $bucketfullpath, $s3_cmd_delete, $logger ) = @_;
 
     if ( $? != 0 ) {
         $logger->error("Backup to $bucketfullpath failed: $!");
         $logger->error("Deleting any partial backup");
 
-        # delete the bucket if it exists
-        $logger->debug(`$delete_from_s3 $bucketfullpath`);
+        # delete the file if it exists
+        $logger->debug(`$s3_cmd_delete $bucketfullpath`);
 
         if ( $? != 0 ) {
             $logger->error("Could not delete partial backup: $!");
